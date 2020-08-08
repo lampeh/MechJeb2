@@ -4,7 +4,7 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.Profiling;
 
-// TODO: floats vs double vs int, Vector3 vs Vector3d
+// TODO: floats vs double vs int, Vector3 vs Vector3d, Mathf vs Math
 // TODO: check memory fragmentation
 // TODO: compare profiler results
 
@@ -107,7 +107,7 @@ namespace MuMech
 
 		private double lastETA = 0;
 
-		private double curSpeed;
+		private float curSpeed;
 
 		private List<ModuleWheelBase> wheelbases;
 
@@ -125,7 +125,6 @@ namespace MuMech
 			// TODO: does every wheel has a ModuleWheelBase? check wheel part mods
 			// TODO: check for brakes / motorized / broken wheels?
 			// TODO: heading control could use a list of steerable wheels instead
-
 			return v.Parts.Where(
 				p => p.HasModule<ModuleWheelBase>()
 				&& p.GetModule<ModuleWheelBase>().wheelType != WheelType.LEG
@@ -145,19 +144,17 @@ print("MJRC: found " + wheelbases.Count + " wheels");
 			Profiler.EndSample();
 		}
 
-		private static double HeadingToPos(Vector3 fromPos, Vector3 toPos, CelestialBody body)
+		private static float HeadingToPos(Vector3 fromPos, Vector3 toPos, CelestialBody body)
 		{
 			// thanks to Cilph who did most of this since I don't understand anything ~ BR2k
-			double fromLon = body.GetLongitude(fromPos);
-			double toLon = body.GetLongitude(toPos);
-			bool dir = (MuUtils.ClampDegrees360(toLon - fromLon) > 180);
+			bool dir = (MuUtils.ClampDegrees360(body.GetLongitude(toPos) - body.GetLongitude(fromPos)) > 180);
 			Vector3 myPos = fromPos - body.transform.position;
-			Vector3 north = body.transform.position + ((float)body.Radius * body.transform.up) - fromPos;
 			Vector3 tgtPos = toPos - fromPos;
-			return (dir ? -1 : 1) * Vector3.Angle(Vector3d.Exclude(myPos.normalized, north.normalized), Vector3.ProjectOnPlane(tgtPos.normalized, myPos.normalized));
+			Vector3 north = body.transform.position + (body.transform.up * (float)body.Radius) - fromPos;
+			return (dir ? -1 : 1) * Vector3.Angle(Vector3.ProjectOnPlane(north.normalized, myPos.normalized), Vector3.ProjectOnPlane(tgtPos.normalized, myPos.normalized));
 		}
 
-		private double HeadingToPos(Vector3 fromPos, Vector3 toPos)
+		private float HeadingToPos(Vector3 fromPos, Vector3 toPos)
 		{
 			return HeadingToPos(fromPos, toPos, mainBody);
 		}
@@ -278,7 +275,8 @@ print("MJRC: not my scene");
 			bool brake = vessel.ActionGroups[KSPActionGroup.Brakes]; // keep brakes locked if they are
 
 			// "forward" portion of surface velocity vector
-			curSpeed = Vector3d.Dot(vesselState.surfaceVelocity, vesselState.forward);
+//			curSpeed = Vector3d.Dot(vesselState.surfaceVelocity, vesselState.forward);
+			curSpeed = Vector3.Dot(vesselState.surfaceVelocity, vesselState.forward);
 
 //			speedIntAcc = speedPID.intAccum;
 
@@ -294,7 +292,7 @@ print("MJRC: not my scene");
 
 				if (ControlHeading)
 				{
-					heading = Math.Round(HeadingToPos(vessel.CoM, wp.Position), 1);
+					heading.val = Math.Round(HeadingToPos(vessel.CoM, wp.Position), 1);
 				}
 
 				if (ControlSpeed)
@@ -309,9 +307,9 @@ print("MJRC: not my scene");
 								   (distance - wp.Radius > 50 ? (float)turnSpeed : 1)));
 					minSpeed = (wp.Quicksave ? 1 : minSpeed);
 					// ^ speed used to go through the waypoint, using half the set speed or maxSpeed as minSpeed for routing waypoints (all except the last)
-					float newSpeed = Mathf.Min(maxSpeed, Mathf.Max((distance - wp.Radius) / (float)curSpeed, minSpeed)); // brake when getting closer
+					float newSpeed = Mathf.Min(maxSpeed, Mathf.Max((distance - wp.Radius) / curSpeed, minSpeed)); // brake when getting closer
 					newSpeed = (newSpeed > turnSpeed ? TurningSpeed(newSpeed, headingErr) : newSpeed); // reduce speed when turning a lot
-					float radius = Mathf.Max(wp.Radius, 10);
+					float radius = Mathf.Max(wp.Radius, 10f);
 					if (distance < radius)
 					{
 						if (WaypointIndex + 1 >= Waypoints.Count) // last waypoint
@@ -386,9 +384,9 @@ print("MJRC: not my scene");
 				if (s.wheelSteer == s.wheelSteerTrim || !vessel.isActiveVessel)
 				{
 					// turnSpeed needs to be higher than curSpeed or it will never steer as much as it could even at 0.2m/s above it
-					float limit = (Math.Abs(curSpeed) > turnSpeed ? Mathf.Clamp((float)((turnSpeed + 6) / (curSpeed*curSpeed)), 0.1f, 1f) : 1f);
+					float limit = (Mathf.Abs(curSpeed) > turnSpeed ? Mathf.Clamp((float)((turnSpeed + 6) / (curSpeed*curSpeed)), 0.1f, 1f) : 1f);
 
-					// double act = headingPID.Compute(headingErr * headingErr / 10 * Math.Sign(headingErr));
+					// double act = headingPID.Compute(headingErr * headingErr / 10 * Mathf.Sign(headingErr));
 					float act = (float)headingPID.Compute(headingErr);
 
 					// prevents it from flying above a waypoint and landing with steering at max while still going fast
@@ -410,9 +408,9 @@ print("MJRC: not my scene");
 			{
 				Profiler.BeginSample("ControlSpeed");
 
-				speedPID.intAccum = Mathf.Clamp((float)speedPID.intAccum, -5, 5);
+				speedPID.intAccum = Mathf.Clamp((float)speedPID.intAccum, -5f, 5f);
 
-				speedErr = (WaypointIndex == -1 ? speed.val : tgtSpeed) - curSpeed;
+				speedErr = (WaypointIndex == -1 ? (double)speed : tgtSpeed) - curSpeed;
 
 				if (s.wheelThrottle == s.wheelThrottleTrim || !vessel.isActiveVessel)
 				{
@@ -424,7 +422,7 @@ print("MJRC: not my scene");
 
 					if (curSpeed < 0 & s.wheelThrottle < 0) { s.wheelThrottle = 0; } // don't go backwards
 					if (Mathf.Sign(act) + Mathf.Sign(s.wheelThrottle) == 0) { s.wheelThrottle = Mathf.Clamp(act, -1f, 1f); }
-					if (speedErr < -1 && StabilityControl && Mathf.Sign(s.wheelThrottle) + Math.Sign(curSpeed) == 0) { // StabilityControl && traction > 50 &&
+					if (speedErr < -1 && StabilityControl && Mathf.Sign(s.wheelThrottle) + Mathf.Sign(curSpeed) == 0) { // StabilityControl && traction > 50 &&
 						brake = true;
 					}
 
@@ -450,7 +448,7 @@ print("MJRC: not my scene");
 				Vector3 norm = hit.normal;
 
 				Vector3 fwd = (Vector3)(traction > 0 ?
-					vesselState.forward * 4 - vessel.transform.right * s.wheelSteer * Mathf.Sign((float)curSpeed) :
+					vesselState.forward * 4f - vessel.transform.right * s.wheelSteer * Mathf.Sign(curSpeed) :
 					vesselState.surfaceVelocity); // in the air so follow velocity
 				Vector3.OrthoNormalize(ref norm, ref fwd);
 				var quat = Quaternion.LookRotation(fwd, norm);
@@ -483,7 +481,7 @@ print("MJRC: not my scene");
 																							 p.deployState == ModuleDeployablePart.DeployState.EXTENDED).ForEach(p => p.Retract());
 				}
 
-				if (energyLeft < 0.05 && Math.Sign(s.wheelThrottle) + Math.Sign(curSpeed) != 0)
+				if (energyLeft < 0.05 && Mathf.Sign(s.wheelThrottle) + Mathf.Sign(curSpeed) != 0)
 				{
 					// save remaining energy by not using it for acceleration
 					s.wheelThrottle = 0;
@@ -509,7 +507,7 @@ print("MJRC: not my scene");
 				Profiler.EndSample();
 			}
 
-			if (s.wheelThrottle != 0 && (Math.Sign(s.wheelThrottle) + Math.Sign(curSpeed) != 0 || curSpeed < 1))
+			if (s.wheelThrottle != 0 && (Mathf.Sign(s.wheelThrottle) + Mathf.Sign(curSpeed) != 0 || curSpeed < 1f))
 			{
 				brake = false; // the AP or user want to drive into the direction of momentum so release the brake
 			}
