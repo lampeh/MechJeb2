@@ -69,16 +69,28 @@ namespace MuMech
             }
 
 			GUILayout.BeginVertical();
-			
+
+//			if (!ap.enabled) { ap.CalculateTraction(); } // keep calculating traction just for displaying it
+
+			if (autopilot.enabled)
+			{
+				ed.registry.Find(i => i.id == "Value:RoverController.traction").DrawItem();
+			}
+
+if (autopilot.WaypointIndex >= 0) {
+/*
 			GUILayout.BeginHorizontal();
 			GUILayout.Label(Localizer.Format("#MechJeb_Rover_label1"), GUILayout.ExpandWidth(true));//"Target Speed"
 			GUILayout.Label(autopilot.tgtSpeed.ToString("F1"), GUILayout.ExpandWidth(false));
 			GUILayout.EndHorizontal();
+*/
+			ed.registry.Find(i => i.id == "Value:RoverController.tgtSpeed").DrawItem();
 
 			GUILayout.BeginHorizontal();
 			GUILayout.Label(Localizer.Format("#MechJeb_Rover_label2"), GUILayout.ExpandWidth(true));//"Waypoints"
 			GUILayout.Label("Index " + (autopilot.WaypointIndex + 1).ToString() + " of " + autopilot.Waypoints.Count.ToString(), GUILayout.ExpandWidth(false));
 			GUILayout.EndHorizontal();
+}
 			
 //			GUILayout.Label("Debug1: " + autopilot.debug1.ToString("F3"));
 			
@@ -112,9 +124,10 @@ namespace MuMech
 			if (autopilot.Waypoints.Count > 0) {
 				if (!autopilot.ControlHeading || !autopilot.ControlSpeed) {
 					if (GUILayout.Button(Localizer.Format("#MechJeb_Rover_button3"))) {//"Drive"
-						autopilot.WaypointIndex = Mathf.Max(0, (alt ? 0 : autopilot.WaypointIndex));
+						//autopilot.WaypointIndex = Mathf.Max(0, (alt ? 0 : autopilot.WaypointIndex));
+if (autopilot.WaypointIndex < 0) autopilot.WaypointIndex = 0;
 						autopilot.ControlHeading = autopilot.ControlSpeed = true;
-						// autopilot.LoopWaypoints = alt;
+						autopilot.LoopWaypoints = alt;
 					}
 				}
 				else if (GUILayout.Button(Localizer.Format("#MechJeb_Rover_button4"))) {//"Stop"
@@ -142,9 +155,10 @@ namespace MuMech
 			{
 				if (autopilot.ControlHeading || autopilot.ControlSpeed || autopilot.StabilityControl || autopilot.BrakeOnEnergyDepletion || autopilot.BrakeOnEject)
 				{
-					autopilot.users.Add(this);
+					if (!autopilot.users.Contains(this))
+						autopilot.users.Add(this);
 				}
-				else
+				else if (autopilot.users.Contains(this))
 				{
 					autopilot.users.Remove(this);
 				}

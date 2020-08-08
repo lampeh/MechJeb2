@@ -3,7 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using UnityEngine;
+using UnityEngine.Profiling;
 using KSP.Localization;
+
 namespace MuMech
 {
 	public class MechJebWaypoint {
@@ -20,6 +22,7 @@ namespace MuMech
 		public bool Quicksave;
 
 		public CelestialBody Body  {
+			// TODO: ActiveVessel or the one this Waypoint belongs to?
 			get { return (Target != null ? Target.mainBody : FlightGlobals.ActiveVessel.mainBody); }
 		}
 
@@ -85,11 +88,15 @@ namespace MuMech
 		}
 
 		public void Update() {
+			Profiler.BeginSample("Waypoint.Update");
+
+			// update target position
 			if (Target != null) {
 				Position = Target.CoM;
 				Latitude = Body.GetLatitude(Position);
 				Longitude = Body.GetLongitude(Position);
 			}
+			// TODO: why fine-tune the Waypoint position? terrain quality?
 			else {
 				Position = Body.GetWorldSurfacePosition(Latitude, Longitude, Body.TerrainAltitude(Latitude, Longitude));
 				if (Vector3d.Distance(Position, FlightGlobals.ActiveVessel.CoM) < 200) {
@@ -106,8 +113,11 @@ namespace MuMech
 					}
 				}
 			}
+
 			if (MinSpeed > 0 && MaxSpeed > 0 && MinSpeed > MaxSpeed) { MinSpeed = MaxSpeed; }
 			else if (MinSpeed > 0 && MaxSpeed > 0 && MaxSpeed < MinSpeed) { MaxSpeed = MinSpeed; }
+
+			Profiler.EndSample();
 		}
 	}
 
@@ -303,6 +313,8 @@ namespace MuMech
 		public override void OnLoad(ConfigNode local, ConfigNode type, ConfigNode global)
 		{
 			base.OnLoad(local, type, global);
+
+			if (!FlightGlobals.ready) return; // bodies not loaded yet
 
 			ConfigNode wps = new ConfigNode("Routes");
 			if (KSP.IO.File.Exists<MechJebCore>("mechjeb_routes.cfg"))
@@ -608,24 +620,24 @@ namespace MuMech
 						GUILayout.Label("  Radius: ", GUILayout.ExpandWidth(false));
 						tmpRadius = GUILayout.TextField(tmpRadius, GUILayout.Width(50));
 						float.TryParse(tmpRadius, out wp.Radius);
-						if (GUILayout.Button("A", GUILayout.ExpandWidth(false))) { ap.Waypoints.GetRange(i, ap.Waypoints.Count).ForEach(fewp => fewp.Radius = wp.Radius); }
+						if (GUILayout.Button("A", GUILayout.ExpandWidth(false))) { ap.Waypoints.GetRange(i, ap.Waypoints.Count - i).ForEach(fewp => fewp.Radius = wp.Radius); }
 
 						GUILayout.Label("- Speed: ", GUILayout.ExpandWidth(false));
 						tmpMinSpeed = GUILayout.TextField(tmpMinSpeed, GUILayout.Width(40));
 						float.TryParse(tmpMinSpeed, out wp.MinSpeed);
-						if (GUILayout.Button("A", GUILayout.ExpandWidth(false))) { ap.Waypoints.GetRange(i, ap.Waypoints.Count).ForEach(fewp => fewp.MinSpeed = wp.MinSpeed); }
+						if (GUILayout.Button("A", GUILayout.ExpandWidth(false))) { ap.Waypoints.GetRange(i, ap.Waypoints.Count - i).ForEach(fewp => fewp.MinSpeed = wp.MinSpeed); }
 
 						GUILayout.Label(" - ", GUILayout.ExpandWidth(false));
 						tmpMaxSpeed = GUILayout.TextField(tmpMaxSpeed, GUILayout.Width(40));
 						float.TryParse(tmpMaxSpeed, out wp.MaxSpeed);
-						if (GUILayout.Button("A", GUILayout.ExpandWidth(false))) { ap.Waypoints.GetRange(i, ap.Waypoints.Count).ForEach(fewp => fewp.MaxSpeed = wp.MaxSpeed); }
+						if (GUILayout.Button("A", GUILayout.ExpandWidth(false))) { ap.Waypoints.GetRange(i, ap.Waypoints.Count - i).ForEach(fewp => fewp.MaxSpeed = wp.MaxSpeed); }
 
 						GUILayout.FlexibleSpace();
 						if (GUILayout.Button("QS", (wp.Quicksave ? styleQuicksave : styleInactive), GUILayout.ExpandWidth(false)))
 						{
 							if (alt)
 							{
-								ap.Waypoints.GetRange(i, ap.Waypoints.Count).ForEach(fewp => fewp.Quicksave = !fewp.Quicksave);
+								ap.Waypoints.GetRange(i, ap.Waypoints.Count - i).ForEach(fewp => fewp.Quicksave = !fewp.Quicksave);
 							}
 							else
 							{
@@ -684,20 +696,22 @@ namespace MuMech
 					}
 				}
 			}
-			if (GUILayout.Button((alt ? "Clear" : "Remove"), GUILayout.Width(65)) && selIndex >= 0 && ap.Waypoints.Count > 0)
+			if (GUILayout.Button((alt ? "Clear" : "Remove"), GUILayout.Width(65)) && ap.Waypoints.Count > 0)
 			{
 				if (alt)
 				{
 					ap.WaypointIndex = -1;
 					ap.Waypoints.Clear();
+					selIndex = -1;
 				}
-				else
+				else if (selIndex >= 0)
 				{
 					ap.Waypoints.RemoveAt(selIndex);
 					if (ap.WaypointIndex > selIndex) { ap.WaypointIndex--; }
+					if (ap.WaypointIndex >= ap.Waypoints.Count) { ap.WaypointIndex = ap.Waypoints.Count - 1; }
+//					if (selIndex >= ap.Waypoints.Count) { selIndex = ap.Waypoints.Count - 1; }
+					selIndex = -1;
 				}
-			    selIndex = -1;
-				//if (ap.WaypointIndex >= ap.Waypoints.Count) { ap.WaypointIndex = ap.Waypoints.Count - 1; }
 			}
 			if (GUILayout.Button((alt ? "Top" : "Up"), GUILayout.Width(57)) && selIndex > 0 && selIndex < ap.Waypoints.Count && ap.Waypoints.Count >= 2)
             {
@@ -752,7 +766,7 @@ namespace MuMech
 			bool alt = Input.GetKey(KeyCode.LeftAlt);
 			titleAdd = "Settings";
 			MechJebModuleCustomWindowEditor ed = core.GetComputerModule<MechJebModuleCustomWindowEditor>();
-			if (!ap.enabled) { ap.CalculateTraction(); } // keep calculating traction just for displaying it
+//			if (!ap.enabled) { ap.CalculateTraction(); } // keep calculating traction just for displaying it
 
 			scroll = GUILayout.BeginScrollView(scroll);
 
@@ -768,7 +782,7 @@ namespace MuMech
 					ed.registry.Find(i => i.id == "Editable:RoverController.hPIDi").DrawItem();
 					ed.registry.Find(i => i.id == "Editable:RoverController.hPIDd").DrawItem();
 					ed.registry.Find(i => i.id == "Editable:RoverController.terrainLookAhead").DrawItem();
-		//			ed.registry.Find(i => i.id == "Value:RoverController.speedIntAcc").DrawItem();
+//					ed.registry.Find(i => i.id == "Value:RoverController.speedIntAcc").DrawItem();
 					ed.registry.Find(i => i.id == "Editable:RoverController.tractionLimit").DrawItem();
 					ed.registry.Find(i => i.id == "Toggle:RoverController.LimitAcceleration").DrawItem();
 					GUILayout.EndVertical();
@@ -778,7 +792,7 @@ namespace MuMech
 					ed.registry.Find(i => i.id == "Editable:RoverController.sPIDi").DrawItem();
 					ed.registry.Find(i => i.id == "Editable:RoverController.sPIDd").DrawItem();
 					ed.registry.Find(i => i.id == "Editable:RoverController.turnSpeed").DrawItem();
-					ed.registry.Find(i => i.id == "Value:RoverController.traction").DrawItem();
+//					ed.registry.Find(i => i.id == "Value:RoverController.traction").DrawItem();
 					GUILayout.EndVertical();
 
 					GUILayout.EndHorizontal();
@@ -854,6 +868,7 @@ namespace MuMech
 					if (GUILayout.Button("Delete", GUILayout.Width(70)))
 					{
 						Routes.RemoveAll(r => r.Name == bodyWPs[i].Name && r.Body == vessel.mainBody && r.Mode == Mode.ToString());
+						SaveRoutes();
 						saveIndex = -1;
 					}
 				}
@@ -910,6 +925,8 @@ namespace MuMech
 
 		protected override void WindowGUI(int windowID)
 		{
+//			Profiler.BeginSample("WindowGUI");
+
 			if (GUI.Button(new Rect(windowPos.width - 48, 0, 13, 20), "?", GuiUtils.yellowOnHover))
 			{
 				var help = core.GetComputerModule<MechJebModuleWaypointHelpWindow>();
@@ -1003,10 +1020,14 @@ namespace MuMech
 			}
 
 			base.WindowGUI(windowID);
+
+//			Profiler.EndSample();
 		}
 
 		public override void OnFixedUpdate()
 		{
+//			Profiler.BeginSample("OnFixedUpdate");
+
 			if (vessel.isActiveVessel && (renderer == null || renderer.ap != ap)) { MechJebRouteRenderer.AttachToMapView(core); } //MechJebRouteRenderer.AttachToMapView(core); }
 			ap.Waypoints.ForEach(wp => wp.Update());
 //			float scale = Vector3.Distance(FlightCamera.fetch.mainCamera.transform.position, vessel.CoM) / 900f;
@@ -1014,6 +1035,8 @@ namespace MuMech
 //			greenLine.SetPosition(1, vessel.CoM + ap.norm * 5);
 //			greenLine.SetWidth(scale + 0.1f, scale + 0.1f);
 			base.OnFixedUpdate();
+
+//			Profiler.EndSample();
 		}
 	}
 
@@ -1060,6 +1083,8 @@ namespace MuMech
 
 		protected override void WindowGUI(int windowID)
 		{
+//			Profiler.BeginSample("WindowGUI");
+
 			if (btnInactive == null)
 			{
 				btnInactive = new GUIStyle(GuiUtils.skin.button);
@@ -1143,6 +1168,8 @@ namespace MuMech
 		 	}
 
 			base.WindowGUI(windowID);
+
+//			Profiler.EndSample();
 		}
 	}
 
@@ -1212,6 +1239,8 @@ namespace MuMech
 
 		public void OnPreRender()
 		{
+			Profiler.BeginSample("OnPreRender");
+
 			if (NewLineRenderer(ref pastPath)) { pastPath.startColor = pastPathColor; pastPath.endColor=pastPathColor; }
 			if (NewLineRenderer(ref currPath)) { currPath.startColor = currPathColor; currPath.endColor=currPathColor; }
 			if (NewLineRenderer(ref nextPath)) { nextPath.startColor = nextPathColor; nextPath.endColor=nextPathColor; }
@@ -1219,6 +1248,8 @@ namespace MuMech
 
 			//Debug.Log(ap.vessel.vesselName);
 			var window = ap.core.GetComputerModule<MechJebModuleWaypointWindow>();
+
+			// TODO: adapt to planet packs
 			switch (ap.vessel.mainBody.bodyName)
 			{
 					case "Moho" : addHeight = window.MohoMapdist; break;
@@ -1324,6 +1355,8 @@ namespace MuMech
 				//Debug.Log("moo");
 				selWP.enabled = pastPath.enabled = currPath.enabled = nextPath.enabled = false;
 			}
+
+			Profiler.EndSample();
 		}
 	}
 }
