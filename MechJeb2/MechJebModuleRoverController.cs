@@ -16,87 +16,100 @@ namespace MuMech
 		public List<MechJebWaypoint> Waypoints = new List<MechJebWaypoint>();
 		public MuMech.MovingAverage etaSpeed = new MovingAverage(50);
 
+public bool boed = false;
+public bool boedw = false;
+public bool bob = false;
+
 		// TODO: add loop control in WaypointWindow?
 		public bool LoopWaypoints = false;
 
 
-		[ToggleInfoItem("#MechJeb_ControlHeading", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Local)]//Heading control
+		[ToggleInfoItem("#MechJeb_ControlHeading", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Local)] // Heading control
 		public bool ControlHeading;
 
-		[EditableInfoItem("#MechJeb_Heading", InfoItem.Category.Rover, width = 40), Persistent(pass = (int)Pass.Local)]//Heading
+		[EditableInfoItem("#MechJeb_Heading", InfoItem.Category.Rover, width = 40), Persistent(pass = (int)Pass.Local)] // Heading
 		public EditableDouble heading = 0;
 
-		[ValueInfoItem("#MechJeb_Headingerror", InfoItem.Category.Rover, format = "F1", units = "º")]//Heading error
+		[ValueInfoItem("#MechJeb_Headingerror", InfoItem.Category.Rover, format = "F1", units = "º")] // Heading error
 		public double headingErr;
 
-		[ToggleInfoItem("#MechJeb_ControlSpeed", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Local)]//Speed control
+		[ToggleInfoItem("#MechJeb_ControlSpeed", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Local)] // Speed control
 		public bool ControlSpeed = false;
 
-		[EditableInfoItem("#MechJeb_Speed", InfoItem.Category.Rover, width = 40), Persistent(pass = (int)Pass.Local)]//Speed
+		[EditableInfoItem("#MechJeb_Speed", InfoItem.Category.Rover, width = 40), Persistent(pass = (int)Pass.Local)] // Speed
 		public EditableDouble speed = 10;
 
-		[ValueInfoItem("#MechJeb_Speederror", InfoItem.Category.Rover, format = ValueInfoItem.SI, units = "m/s")]//Speed error
+		[ValueInfoItem("#MechJeb_Speederror", InfoItem.Category.Rover, format = ValueInfoItem.SI, units = "m/s")] // Speed error
 		public double speedErr;
 
-		[ValueInfoItem("#MechJeb_Rover_label1", InfoItem.Category.Rover, format = ValueInfoItem.SI, units = "m/s")]//Target speed
+		[ValueInfoItem("#MechJeb_Rover_label1", InfoItem.Category.Rover, format = ValueInfoItem.SI, units = "m/s")] // Target speed
 		public double tgtSpeed;
 
-		[ToggleInfoItem("#MechJeb_BrakeOnEject", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Local)]//Brake on Pilot Eject
+		[ToggleInfoItem("#MechJeb_StabilityControl", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Local)] // Stability control
+		public bool StabilityControl = false;
+
+		[ToggleInfoItem("#MechJeb_BrakeOnEject", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Local)] // Brake on Pilot Eject
 		public bool BrakeOnEject = false;
 
-		[ToggleInfoItem("#MechJeb_BrakeOnEnergyDepletion", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Local)]//Brake on Energy Depletion
+		[ToggleInfoItem("#MechJeb_BrakeOnEnergyDepletion", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Local)] // Brake on Energy Depletion
 		public bool BrakeOnEnergyDepletion = false;
 
 		// TODO: "warp to daylight" really is "warp til recharged"
-		[ToggleInfoItem("#MechJeb_WarpToDaylight", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Local)]//Warp until Day if Depleted
+		[ToggleInfoItem("#MechJeb_WarpToDaylight", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Local)] // Warp until Day if Depleted
 		public bool WarpToDaylight = false;
 
-		[ToggleInfoItem("#MechJeb_StabilityControl", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Local)]//Stability Control
-		public bool StabilityControl = false;
-
-
-		// TODO: no longer implemented
-		[ToggleInfoItem("#MechJeb_LimitAcceleration", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Local | (int)Pass.Type)]//Limit Acceleration
-		public bool LimitAcceleration = false;
-
-		[EditableInfoItem("#MechJeb_SafeTurnspeed", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)]//Safe turnspeed
-		public EditableDouble turnSpeed = 3;
-
-		[EditableInfoItem("#MechJeb_TerrainLookAhead", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)]//Terrain Look Ahead
-		public EditableDouble terrainLookAhead = 1.0;
-
-		[EditableInfoItem("#MechJeb_BrakeSpeedLimit", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)]//Brake Speed Limit
-		public EditableDouble brakeSpeedLimit = 0.7;
-
-		[EditableInfoItem("#MechJeb_HeadingPIDP", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)]//Heading PID P
-		public EditableDouble hPIDp = 0.03; // 0.01
-
-		[EditableInfoItem("#MechJeb_HeadingPIDI", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)]//Heading PID I
-		public EditableDouble hPIDi = 0.002; // 0.001
-
-		[EditableInfoItem("#MechJeb_HeadingPIDD", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)]//Heading PID D
-		public EditableDouble hPIDd = 0.005;
-
-		[EditableInfoItem("#MechJeb_SpeedPIDP", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)]//Speed PID P
-		public EditableDouble sPIDp = 2.0;
-
-		[EditableInfoItem("#MechJeb_SpeedPIDI", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)]//Speed PID I
-		public EditableDouble sPIDi = 0.1;
-
-		[EditableInfoItem("#MechJeb_SpeedPIDD", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)]//Speed PID D
-		public EditableDouble sPIDd = 0.001;
-
 /*
-		[ValueInfoItem("#MechJeb_SpeedIntAcc", InfoItem.Category.Rover, format = ValueInfoItem.SI, units = "m/s")]//Speed Int Acc
-		public double speedIntAcc = 0;
+		// TODO: brake if a wheel broke
+		[ToggleInfoItem("#MechJeb_BrakeOnBreak", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Local)] // Brake on Broken Wheels
+		public bool BrakeOnBreak = false;
 */
 
-		[ValueInfoItem("#MechJeb_Traction", InfoItem.Category.Rover, units = "%")]//Traction
+		// TODO: no longer implemented
+		[ToggleInfoItem("#MechJeb_LimitAcceleration", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Local | (int)Pass.Type)] // Limit Acceleration
+		public bool LimitAcceleration = false;
+
+		[EditableInfoItem("#MechJeb_SafeTurnspeed", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)] // Safe turnspeed
+		public EditableDouble turnSpeed = 3;
+
+		[EditableInfoItem("#MechJeb_TerrainLookAhead", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)] // Terrain Look Ahead
+		public EditableDouble terrainLookAhead = 1.0;
+
+		[EditableInfoItem("#MechJeb_BrakeSpeedLimit", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)] // Brake Speed Limit
+		public EditableDouble brakeSpeedLimit = 0.7;
+
+		[EditableInfoItem("#MechJeb_HeadingPIDP", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)] // Heading PID P
+		public EditableDouble hPIDp = 0.03; // 0.01
+
+		[EditableInfoItem("#MechJeb_HeadingPIDI", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)] // Heading PID I
+		public EditableDouble hPIDi = 0.002; // 0.001
+
+		[EditableInfoItem("#MechJeb_HeadingPIDD", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)] // Heading PID D
+		public EditableDouble hPIDd = 0.005;
+
+		[EditableInfoItem("#MechJeb_SpeedPIDP", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)] // Speed PID P
+		public EditableDouble sPIDp = 2.0;
+
+		[EditableInfoItem("#MechJeb_SpeedPIDI", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)] // Speed PID I
+		public EditableDouble sPIDi = 0.1;
+
+		[EditableInfoItem("#MechJeb_SpeedPIDD", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)] // Speed PID D
+		public EditableDouble sPIDd = 0.001;
+
+		[ValueInfoItem("#MechJeb_Traction", InfoItem.Category.Rover, units = "%")] // Traction
 		public int traction = 0;
 
-		[EditableInfoItem("#MechJeb_TractionBrakeLimit", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)]//Traction Brake Limit
+		[EditableInfoItem("#MechJeb_TractionBrakeLimit", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)] // Traction Brake Limit
 		public EditableInt tractionLimit = 75;
 
+		// TODO: maybe floating point percentages are better in case of huge batteries
+		[ValueInfoItem("#MechJeb_EnergyLeft", InfoItem.Category.Rover, units = "%")] // EC reserves
+		public int energyLeft = 0;
+
+/*
+		// TODO: configurable limits
+		[EditableInfoItem("#MechJeb_EnergyLimit", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)] // EC limit
+		public EditableInt energyLimit = 1;
+*/
 
 		private PIDController headingPID;
 		private PIDController speedPID;
@@ -139,19 +152,37 @@ namespace MuMech
 			{
 				// TODO: re-use list?
 				wheelbases = CountWheels(v);
-print("MJRC: found " + wheelbases.Count + " wheels");
 			}
+			Profiler.EndSample();
+		}
+
+		private static int EnergyLeft(Vessel v)
+		{
+			// TODO: maybe cache a list of resources or even a PartResourceList
+
+			double amount = 0;
+			double maxAmount = 0;
+
+			v.GetConnectedResourceTotals(PartResourceLibrary.ElectricityHashcode, out amount, out maxAmount, true);
+
+			return maxAmount > 0 ? (int)((amount * 100 / maxAmount) + 0.5) : 0;
+		}
+
+		private void EnergyLeft()
+		{
+			Profiler.BeginSample("EnergyLeft");
+			energyLeft = EnergyLeft(vessel);
 			Profiler.EndSample();
 		}
 
 		private static float HeadingToPos(Vector3 fromPos, Vector3 toPos, CelestialBody body)
 		{
 			// thanks to Cilph who did most of this since I don't understand anything ~ BR2k
-			bool dir = (MuUtils.ClampDegrees360(body.GetLongitude(toPos) - body.GetLongitude(fromPos)) > 180);
 			Vector3 myPos = fromPos - body.transform.position;
 			Vector3 tgtPos = toPos - fromPos;
 			Vector3 north = body.transform.position + (body.transform.up * (float)body.Radius) - fromPos;
-			return (dir ? -1 : 1) * Vector3.Angle(Vector3.ProjectOnPlane(north.normalized, myPos.normalized), Vector3.ProjectOnPlane(tgtPos.normalized, myPos.normalized));
+			float dir = (MuUtils.ClampDegrees360(body.GetLongitude(toPos) - body.GetLongitude(fromPos)) > 180) ? -1f : 1f;
+			return dir * Vector3.Angle(Vector3.ProjectOnPlane(north.normalized, myPos.normalized), Vector3.ProjectOnPlane(tgtPos.normalized, myPos.normalized));
 		}
 
 		private float HeadingToPos(Vector3 fromPos, Vector3 toPos)
@@ -231,6 +262,7 @@ print("MJRC: not my scene");
 //			traction = wheelbases.Count > 0 ? wheelbases.Sum(p => p.isGrounded ? 100 : 0) / wheelbases.Count : 0;
 
 			int result = 0;
+
 			if (wheelbases.Count > 0)
 			{
 				for (int i = 0; i < wheelbases.Count; i++)
@@ -240,6 +272,7 @@ print("MJRC: not my scene");
 				}
 				result /= wheelbases.Count;
 			}
+
 			traction = result;
 
 			// clamp editable limit to 0-100
@@ -278,8 +311,6 @@ print("MJRC: not my scene");
 //			curSpeed = Vector3d.Dot(vesselState.surfaceVelocity, vesselState.forward);
 			curSpeed = Vector3.Dot(vesselState.surfaceVelocity, vesselState.forward);
 
-//			speedIntAcc = speedPID.intAccum;
-
 			// TODO: differentiate traction limits for driving, braking, steering?
 			CalculateTraction();
 
@@ -292,6 +323,7 @@ print("MJRC: not my scene");
 
 				if (ControlHeading)
 				{
+					// TODO: maybe avoid obstacles?
 					heading.val = Math.Round(HeadingToPos(vessel.CoM, wp.Position), 1);
 				}
 
@@ -299,8 +331,10 @@ print("MJRC: not my scene");
 				{
 					MechJebWaypoint nextWP = (WaypointIndex < Waypoints.Count - 1 ? Waypoints[WaypointIndex + 1] : (LoopWaypoints ? Waypoints[0] : null));
 					float distance = Vector3.Distance(vessel.CoM, wp.Position);
-					if (wp.Target != null) { distance += (float)(wp.Target.srfSpeed * curSpeed) / 2; }
-					// var maxSpeed = (wp.MaxSpeed > 0 ? Mathf.Min(speed, wp.MaxSpeed) : speed); // use waypoints maxSpeed if set and smaller than set the speed or just stick with the set speed
+
+					if (wp.Target != null)
+						distance += (float)(wp.Target.srfSpeed * curSpeed) / 2;
+
 					float maxSpeed = (wp.MaxSpeed > 0 ? wp.MaxSpeed : (float)speed); // speed used to go towards the waypoint, using the waypoints maxSpeed if set or just stick with the set speed
 					float minSpeed = (wp.MinSpeed > 0 ? wp.MinSpeed :
 								   (nextWP != null ? TurningSpeed((nextWP.MaxSpeed > 0 ? nextWP.MaxSpeed : (float)speed), heading - HeadingToPos(wp.Position, nextWP.Position)) :
@@ -390,9 +424,8 @@ print("MJRC: not my scene");
 					float act = (float)headingPID.Compute(headingErr);
 
 					// prevents it from flying above a waypoint and landing with steering at max while still going fast
-					if (traction >= tractionLimit) {
+					if (traction >= tractionLimit)
 						s.wheelSteer = Mathf.Clamp(act, -limit, limit);
-					}
 				}
 
 				Profiler.EndSample();
@@ -422,7 +455,7 @@ print("MJRC: not my scene");
 
 					if (curSpeed < 0 & s.wheelThrottle < 0) { s.wheelThrottle = 0; } // don't go backwards
 					if (Mathf.Sign(act) + Mathf.Sign(s.wheelThrottle) == 0) { s.wheelThrottle = Mathf.Clamp(act, -1f, 1f); }
-					if (speedErr < -1 && StabilityControl && Mathf.Sign(s.wheelThrottle) + Mathf.Sign(curSpeed) == 0) { // StabilityControl && traction > 50 &&
+					if (speedErr < -1 && StabilityControl && Mathf.Sign(s.wheelThrottle) + Mathf.Sign(curSpeed) == 0) {
 						brake = true;
 					}
 
@@ -451,7 +484,7 @@ print("MJRC: not my scene");
 					vesselState.forward * 4f - vessel.transform.right * s.wheelSteer * Mathf.Sign(curSpeed) :
 					vesselState.surfaceVelocity); // in the air so follow velocity
 				Vector3.OrthoNormalize(ref norm, ref fwd);
-				var quat = Quaternion.LookRotation(fwd, norm);
+				Quaternion quat = Quaternion.LookRotation(fwd, norm);
 
 //				line.SetPosition(0, vessel.CoM);
 //				line.SetPosition(1, vessel.CoM + norm * 5);
@@ -464,45 +497,70 @@ print("MJRC: not my scene");
 				Profiler.EndSample();
 			}
 
+boed = false;
+
 			// TODO: collect a list of batteries and panels and update in OnVesselWasModified?
 			// TODO: identify key points in expected behaviour
+			// TODO: check Kopernicus solar panels, do they implement ModuleDeployableSolarPanel
+			// TODO: consider sources other than ModuleDeployableSolarPanel (generators, converters)
+			// TODO: low/high limits to reduce start/stop cycles, open/close panels only once
+
 			if (BrakeOnEnergyDepletion)
 			{
 				Profiler.BeginSample("BrakeOnEnergyDepletion");
 
-				var batteries = vessel.Parts.FindAll(p => p.Resources.Contains(PartResourceLibrary.ElectricityHashcode) && p.Resources.Get(PartResourceLibrary.ElectricityHashcode).flowState);
-				var energyLeft = batteries.Sum(p => p.Resources.Get(PartResourceLibrary.ElectricityHashcode).amount) / batteries.Sum(p => p.Resources.Get(PartResourceLibrary.ElectricityHashcode).maxAmount);
+//				var batteries = vessel.Parts.FindAll(p => p.Resources.Contains(PartResourceLibrary.ElectricityHashcode) && p.Resources.Get(PartResourceLibrary.ElectricityHashcode).flowState);
+//				var energyLeft = batteries.Sum(p => p.Resources.Get(PartResourceLibrary.ElectricityHashcode).amount) / batteries.Sum(p => p.Resources.Get(PartResourceLibrary.ElectricityHashcode).maxAmount);
 //				var openSolars = vessel.mainBody.atmosphere && // true if in atmosphere and there are breakable solarpanels that aren't broken nor retracted
-				var openSolars = vessel.FindPartModulesImplementing<ModuleDeployableSolarPanel>().FindAll(p => p.isBreakable && p.deployState != ModuleDeployablePart.DeployState.BROKEN && p.deployState != ModuleDeployablePart.DeployState.RETRACTED).Count > 0;
+//				var openSolars = vessel.FindPartModulesImplementing<ModuleDeployableSolarPanel>().FindAll(p => p.isBreakable && p.deployState != ModuleDeployablePart.DeployState.BROKEN && p.deployState != ModuleDeployablePart.DeployState.RETRACTED).Count > 0;
 
-				if (openSolars && energyLeft > 0.99)
+				// TODO: move to (Fixed)Update?
+				EnergyLeft();
+
+				// TODO: why use only breakable panels?
+				IEnumerable<ModuleDeployableSolarPanel> solarPanels = vessel.FindPartModulesImplementing<ModuleDeployableSolarPanel>().Where(p =>
+					p.isBreakable &&
+					p.deployState != ModuleDeployablePart.DeployState.BROKEN
+				);
+
+				bool openSolars = solarPanels.Any(p => p.deployState == ModuleDeployablePart.DeployState.EXTENDED);
+
+				// batteries full: retract panels
+				if (energyLeft >= 99 && openSolars)
 				{
-					vessel.FindPartModulesImplementing<ModuleDeployableSolarPanel>().FindAll(p => p.isBreakable &&
-																							 p.deployState == ModuleDeployablePart.DeployState.EXTENDED).ForEach(p => p.Retract());
+					foreach (var p in solarPanels) { p.Retract(); };
 				}
 
-				if (energyLeft < 0.05 && Mathf.Sign(s.wheelThrottle) + Mathf.Sign(curSpeed) != 0)
+				// 5% left, going slow: stop and open solar panels
+				if (energyLeft <= 5 && curSpeed <= brakeSpeedLimit)
 				{
-					// save remaining energy by not using it for acceleration
-					s.wheelThrottle = 0;
-				}
-
-//				if (openSolars || energyLeft < 0.03) { tgtSpeed = 0; }
-
-//				if (curSpeed < brakeSpeedLimit && (energyLeft < 0.05 || openSolars))
-				if (curSpeed < brakeSpeedLimit && energyLeft < 0.05)
-				{
+boed = true;
 					s.wheelThrottle = 0;
 					brake = true;
-					vessel.FindPartModulesImplementing<ModuleDeployableSolarPanel>().FindAll(p => p.isBreakable &&
-																							 p.deployState == ModuleDeployablePart.DeployState.RETRACTED).ForEach(p => p.Extend());
+
+					foreach (var p in solarPanels) { p.Extend(); };
 				}
 
-//					vessel.FindPartModulesImplementing<ModuleDeployableSolarPanel>().FindAll(p => p.deployState == ModuleDeployablePart.DeployState.EXTENDED).Count > 0)
-				if (curSpeed < 0.1 && energyLeft < 0.05 && !waitingForDaylight && openSolars)
+				// energy low, going in the right direction: coast, save remaining energy by not using it for acceleration
+				else if (energyLeft <= 5 && Mathf.Sign(s.wheelThrottle) + Mathf.Sign(curSpeed) != 0)
+				{
+boed = true;
+					s.wheelThrottle = 0;
+				}
+
+				// TODO: what about energy low, *not* going in the right direction (i.e. rolling down the hill)
+				// (speed control should have applied the brakes already)
+
+				// enerygy low, (almost) stopped, any open solar panels: ready for time warp
+				if (energyLeft <= 5 && curSpeed <= 0.1f && !waitingForDaylight && openSolars)
 				{
 					waitingForDaylight = true;
 				}
+
+//				// TODO: overriding tgtSpeed here has no effect
+//				if (openSolars || energyLeft <= 3) { tgtSpeed = 0; }
+//				if (curSpeed < brakeSpeedLimit && (energyLeft <= 5 || openSolars))
+//				vessel.FindPartModulesImplementing<ModuleDeployableSolarPanel>().FindAll(p => p.deployState == ModuleDeployablePart.DeployState.EXTENDED).Count > 0)
 
 				Profiler.EndSample();
 			}
@@ -525,9 +583,10 @@ print("MJRC: not my scene");
 			}
 
 			vessel.ActionGroups.SetGroup(KSPActionGroup.Brakes, brake && (StabilityControl && (ControlHeading || ControlSpeed) ? traction >= tractionLimit : true));
+
 			// only let go of the brake when losing traction if the AP is driving, otherwise assume the player knows when to let go of it
 			// also to not constantly turn off the parking brake from going over a small bump
-			if (brake && curSpeed < 0.1)
+			if (brake && curSpeed < 0.1f)
 			{
 				s.wheelThrottle = 0;
 			}
@@ -578,22 +637,32 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no update"); return; }
 
 //			Profiler.BeginSample("OnUpdate");
 
+boedw = false;
+
 			if (WarpToDaylight && waitingForDaylight && vessel.isActiveVessel)
 			{
 				Profiler.BeginSample("BrakeOnEnergyDepletion");
 
-				var batteries = vessel.Parts.FindAll(p => p.Resources.Contains(PartResourceLibrary.ElectricityHashcode) && p.Resources.Get(PartResourceLibrary.ElectricityHashcode).flowState);
-				var energyLeft = batteries.Sum(p => p.Resources.Get(PartResourceLibrary.ElectricityHashcode).amount) / batteries.Sum(p => p.Resources.Get(PartResourceLibrary.ElectricityHashcode).maxAmount);
+//				var batteries = vessel.Parts.FindAll(p => p.Resources.Contains(PartResourceLibrary.ElectricityHashcode) && p.Resources.Get(PartResourceLibrary.ElectricityHashcode).flowState);
+//				var energyLeft = batteries.Sum(p => p.Resources.Get(PartResourceLibrary.ElectricityHashcode).amount) / batteries.Sum(p => p.Resources.Get(PartResourceLibrary.ElectricityHashcode).maxAmount);
+
+EnergyLeft();
+
+				bool openSolars = vessel.FindPartModulesImplementing<ModuleDeployableSolarPanel>().Where(p =>
+					p.deployState == ModuleDeployablePart.DeployState.EXTENDED
+				).Any();
 
 				// batteries full or no solar panels extended: deactivate warp
-				if (energyLeft > 0.99 || vessel.FindPartModulesImplementing<ModuleDeployableSolarPanel>().FindAll(p => p.deployState == ModuleDeployablePart.DeployState.EXTENDED).Count == 0)
+				if (energyLeft >= 99 || !openSolars)
 				{
 					waitingForDaylight = false;
 					core.warp.MinimumWarp(false);
 				}
 				else
 				{
-					core.warp.WarpRegularAtRate(energyLeft < 0.9 ? 1000 : 50);
+boedw = true;
+					// TODO: get out of phys warp first?
+					core.warp.WarpRegularAtRate(energyLeft < 90 ? 1000 : 50);
 				}
 
 				Profiler.EndSample();
@@ -619,13 +688,14 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no update"); return; }
 
 		public override void OnLoad(ConfigNode local, ConfigNode type, ConfigNode global)
 		{
-			Profiler.BeginSample("OnLoad");
+//			Profiler.BeginSample("OnLoad");
 
 			base.OnLoad(local, type, global);
 
 			if (local != null)
 			{
-				var wps = local.GetNode("Waypoints");
+				ConfigNode wps = local.GetNode("Waypoints");
+
 				if (wps != null && wps.HasNode("Waypoint"))
 				{
 					WaypointIndex = -1;
@@ -642,12 +712,12 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no update"); return; }
 				}
 			}
 
-			Profiler.EndSample();
+//			Profiler.EndSample();
 		}
 
 		public override void OnSave(ConfigNode local, ConfigNode type, ConfigNode global)
 		{
-			Profiler.BeginSample("OnSave");
+//			Profiler.BeginSample("OnSave");
 
 			base.OnSave(local, type, global);
 
@@ -656,7 +726,8 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no update"); return; }
 				if (local.HasNode("Waypoints"))
 					local.RemoveNode("Waypoints");
 
-				if (Waypoints.Count > 0) {
+				if (Waypoints.Count > 0)
+				{
 					ConfigNode cn = new ConfigNode("Waypoints");
 
 					cn.AddValue("Index", WaypointIndex);
@@ -666,7 +737,7 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no update"); return; }
 				}
 			}
 
-			Profiler.EndSample();
+//			Profiler.EndSample();
 		}
 
 		public MechJebModuleRoverController(MechJebCore core) : base(core) { }
