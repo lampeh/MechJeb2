@@ -63,13 +63,9 @@ namespace MuMech
             }
 
             ed.registry.Find(i => i.id == "Toggle:RoverController.BrakeOnEnergyDepletion").DrawItem();
-//var ti = (ToggleInfoItem)ed.registry.Find(i => i.id == "Toggle:RoverController.BrakeOnEnergyDepletion");
-//ti.DrawItem(autopilot.boed);
             if (autopilot.BrakeOnEnergyDepletion)
             {
             	ed.registry.Find(i => i.id == "Toggle:RoverController.WarpToDaylight").DrawItem();
-//var ti2 = (ToggleInfoItem)(ed.registry.Find(i => i.id == "Toggle:RoverController.WarpToDaylight"));
-//ti2.DrawItem(autopilot.boedw);
             }
 
 			GUILayout.BeginVertical();
@@ -79,6 +75,11 @@ namespace MuMech
 			if (autopilot.enabled)
 			{
 				ed.registry.Find(i => i.id == "Value:RoverController.traction").DrawItem();
+				if (autopilot.ControlSpeed)
+					ed.registry.Find(i => i.id == "Value:RoverController.lastThrottle").DrawItem();
+
+				if (autopilot.ControlHeading)
+					ed.registry.Find(i => i.id == "Value:RoverController.lastSteer").DrawItem();
 
 				if (autopilot.BrakeOnEnergyDepletion)
 					ed.registry.Find(i => i.id == "Value:RoverController.energyLeft").DrawItem();

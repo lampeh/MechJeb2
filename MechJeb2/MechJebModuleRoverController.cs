@@ -12,6 +12,9 @@ namespace MuMech
 {
 	public class MechJebModuleRoverController : ComputerModule
 	{
+		// TODO: add loop control in WaypointWindow?
+		public bool LoopWaypoints = false;
+
 		public int WaypointIndex = -1;
 		public List<MechJebWaypoint> Waypoints = new List<MechJebWaypoint>();
 		public MuMech.MovingAverage etaSpeed = new MovingAverage(50);
@@ -19,9 +22,6 @@ namespace MuMech
 public bool boed = false;
 public bool boedw = false;
 public bool bob = false;
-
-		// TODO: add loop control in WaypointWindow?
-		public bool LoopWaypoints = false;
 
 
 		[ToggleInfoItem("#MechJeb_ControlHeading", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Local)] // Heading control
@@ -101,15 +101,6 @@ public bool bob = false;
 		[EditableInfoItem("#MechJeb_TractionBrakeLimit", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)] // Traction Brake Limit
 		public EditableInt tractionLimit = 75;
 
-		// TODO: maybe floating point percentages are better in case of huge batteries
-		[ValueInfoItem("#MechJeb_EnergyLeft", InfoItem.Category.Rover, units = "%")] // EC reserves
-		public int energyLeft = 0;
-
-/*
-		// TODO: configurable limits
-		[EditableInfoItem("#MechJeb_EnergyLimit", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)] // EC limit
-		public EditableInt energyLimit = 1;
-*/
 
 		private PIDController headingPID;
 		private PIDController speedPID;
@@ -124,9 +115,70 @@ public bool bob = false;
 
 		private List<ModuleWheelBase> wheelbases;
 
-//		private float lastThrottle = 0;
-
 //		private LineRenderer line;
+
+
+		// additional debug readouts
+
+		// TODO: maybe floating point percentages are better in case of huge batteries
+		[ValueInfoItem("#MechJeb_EnergyLeft", InfoItem.Category.Rover, units = "%")] // EC reserves
+		public int energyLeft = 0;
+
+/*
+		// TODO: configurable limits
+		[EditableInfoItem("#MechJeb_EnergyLimit", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)] // EC limit
+		public EditableInt energyLimit = 1;
+*/
+
+		[ValueInfoItem("Throttle", InfoItem.Category.Rover, units = "%")]
+		public int lastThrottle = 0;
+
+		[ValueInfoItem("Steering", InfoItem.Category.Rover, units = "%")]
+		public int lastSteer = 0;
+
+
+		// TODO: is this how it's done? why not !=?
+		// TODO: Unity's Mathf.Sign returns 1 if val is 0, does that matter?
+		private static bool SameSign(float val1, float val2)
+		{
+			return Mathf.Sign(val1) + Mathf.Sign(val2) != 0;
+		}
+
+
+		private static float HeadingToPos(Vector3 fromPos, Vector3 toPos, CelestialBody body)
+		{
+			// thanks to Cilph who did most of this since I don't understand anything ~ BR2k
+			Vector3 myPos = fromPos - body.transform.position; // position relative to body origin
+			Vector3 tgtPos = toPos - fromPos; // vector towards target
+			Vector3 north = body.transform.position + (body.transform.up * (float)body.Radius) - fromPos; // vector towards north pole
+			float sign = (MuUtils.ClampDegrees360(body.GetLongitude(toPos) - body.GetLongitude(fromPos)) > 180) ? -1f : 1f; // positively eastwards
+			return sign * Vector3.Angle(Vector3.ProjectOnPlane(north.normalized, myPos.normalized), Vector3.ProjectOnPlane(tgtPos.normalized, myPos.normalized));
+		}
+
+		private float HeadingToPos(Vector3 fromPos, Vector3 toPos)
+		{
+			return HeadingToPos(fromPos, toPos, mainBody);
+		}
+
+
+		private static int EnergyLeft(Vessel v)
+		{
+			// TODO: maybe cache a list of resources or even a PartResourceList
+
+			double amount = 0;
+			double maxAmount = 0;
+
+			v.GetConnectedResourceTotals(PartResourceLibrary.ElectricityHashcode, out amount, out maxAmount, true);
+
+			return maxAmount > 0 ? (int)((amount * 100 / maxAmount) + 0.5) : 0;
+		}
+
+		private void EnergyLeft()
+		{
+			Profiler.BeginSample("EnergyLeft");
+			energyLeft = EnergyLeft(vessel);
+			Profiler.EndSample();
+		}
 
 
 		private static List<ModuleWheelBase> CountWheels(Vessel v)
@@ -156,45 +208,50 @@ public bool bob = false;
 			Profiler.EndSample();
 		}
 
-		private static int EnergyLeft(Vessel v)
+		public void CalculateTraction()
 		{
-			// TODO: maybe cache a list of resources or even a PartResourceList
+			Profiler.BeginSample("CalculateTraction");
 
-			double amount = 0;
-			double maxAmount = 0;
+			if (wheelbases == null)
+				OnVesselWasModified(vessel);
 
-			v.GetConnectedResourceTotals(PartResourceLibrary.ElectricityHashcode, out amount, out maxAmount, true);
+			// sum up percentage of wheels in ground contact
+//			traction = wheelbases.Count > 0 ? wheelbases.Sum(p => p.isGrounded ? 100 : 0) / wheelbases.Count : 0;
 
-			return maxAmount > 0 ? (int)((amount * 100 / maxAmount) + 0.5) : 0;
-		}
+			int result = 0;
 
-		private void EnergyLeft()
-		{
-			Profiler.BeginSample("EnergyLeft");
-			energyLeft = EnergyLeft(vessel);
+			if (wheelbases.Count > 0)
+			{
+				for (int i = 0; i < wheelbases.Count; i++)
+				{
+					if (wheelbases[i].isGrounded)
+						result += 100;
+				}
+				result /= wheelbases.Count;
+			}
+
+			traction = result;
+
+			// clamp editable limit to 0-100
+//			tractionLimit = Math.Min(Math.Max(tractionLimit, 0), 100);
+
+			if (tractionLimit < 0)
+				tractionLimit = 0;
+			else if (tractionLimit > 100)
+				tractionLimit = 100;
+
 			Profiler.EndSample();
 		}
 
-		private static float HeadingToPos(Vector3 fromPos, Vector3 toPos, CelestialBody body)
-		{
-			// thanks to Cilph who did most of this since I don't understand anything ~ BR2k
-			Vector3 myPos = fromPos - body.transform.position;
-			Vector3 tgtPos = toPos - fromPos;
-			Vector3 north = body.transform.position + (body.transform.up * (float)body.Radius) - fromPos;
-			float dir = (MuUtils.ClampDegrees360(body.GetLongitude(toPos) - body.GetLongitude(fromPos)) > 180) ? -1f : 1f;
-			return dir * Vector3.Angle(Vector3.ProjectOnPlane(north.normalized, myPos.normalized), Vector3.ProjectOnPlane(tgtPos.normalized, myPos.normalized));
-		}
-
-		private float HeadingToPos(Vector3 fromPos, Vector3 toPos)
-		{
-			return HeadingToPos(fromPos, toPos, mainBody);
-		}
-
 		// ramp down from speed to turnSpeed with increasing heading error
+		// TODO: only used by waypoint AP, not speed or heading control. should it?
+		// TODO: consider traction of steerable wheels?
+		// TODO: m/s / ° / 3
 		private float TurningSpeed(double speed, double error)
 		{
 			return Mathf.Max((float)speed / Mathf.Max(Mathf.Abs((float)error) / 3f, 1f), (float)turnSpeed);
 		}
+
 
 		public override void OnStart(PartModule.StartState state)
 		{
@@ -251,40 +308,6 @@ print("MJRC: not my scene");
 			Profiler.EndSample();
 		}
 
-		public void CalculateTraction()
-		{
-			Profiler.BeginSample("CalculateTraction");
-
-			if (wheelbases == null)
-				OnVesselWasModified(vessel);
-
-			// sum up percentage of wheels in ground contact
-//			traction = wheelbases.Count > 0 ? wheelbases.Sum(p => p.isGrounded ? 100 : 0) / wheelbases.Count : 0;
-
-			int result = 0;
-
-			if (wheelbases.Count > 0)
-			{
-				for (int i = 0; i < wheelbases.Count; i++)
-				{
-					if (wheelbases[i].isGrounded)
-						result += 100;
-				}
-				result /= wheelbases.Count;
-			}
-
-			traction = result;
-
-			// clamp editable limit to 0-100
-//			tractionLimit = Math.Min(Math.Max(tractionLimit, 0), 100);
-
-			if (tractionLimit < 0)
-				tractionLimit = 0;
-			else if (tractionLimit > 100)
-				tractionLimit = 100;
-
-			Profiler.EndSample();
-		}
 
 		public override void Drive(FlightCtrlState s)
 		{
@@ -308,7 +331,6 @@ print("MJRC: not my scene");
 			bool brake = vessel.ActionGroups[KSPActionGroup.Brakes]; // keep brakes locked if they are
 
 			// "forward" portion of surface velocity vector
-//			curSpeed = Vector3d.Dot(vesselState.surfaceVelocity, vesselState.forward);
 			curSpeed = Vector3.Dot(vesselState.surfaceVelocity, vesselState.forward);
 
 			// TODO: differentiate traction limits for driving, braking, steering?
@@ -414,14 +436,17 @@ print("MJRC: not my scene");
 				headingPID.intAccum = Mathf.Clamp((float)headingPID.intAccum, -1f, 1f);
 
 				headingErr = MuUtils.ClampDegrees180(vesselState.rotationVesselSurface.eulerAngles.y - heading);
+if (curSpeed < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); }
 
 				if (s.wheelSteer == s.wheelSteerTrim || !vessel.isActiveVessel)
 				{
 					// turnSpeed needs to be higher than curSpeed or it will never steer as much as it could even at 0.2m/s above it
 					float limit = (Mathf.Abs(curSpeed) > turnSpeed ? Mathf.Clamp((float)((turnSpeed + 6) / (curSpeed*curSpeed)), 0.1f, 1f) : 1f);
+//float limit = 1f;
 
 					// double act = headingPID.Compute(headingErr * headingErr / 10 * Mathf.Sign(headingErr));
 					float act = (float)headingPID.Compute(headingErr);
+if (curSpeed < 0) { act = -act; }
 
 					// prevents it from flying above a waypoint and landing with steering at max while still going fast
 					if (traction >= tractionLimit)
@@ -450,16 +475,11 @@ print("MJRC: not my scene");
 					float act = (float)speedPID.Compute(speedErr);
 
 					s.wheelThrottle = Mathf.Clamp(act, -1f, 1f);
-					// s.wheelThrottle = (!LimitAcceleration ? Mathf.Clamp(act, -1, 1) : // I think I'm using these ( ? : ) a bit too much
-						// (traction == 0 ? 0 : (act < 0 ? Mathf.Clamp(act, -1f, 1f) : (lastThrottle + Mathf.Clamp(act - lastThrottle, -0.01f, 0.01f)) * (traction < tractionLimit ? -1 : 1))));
 
-					if (curSpeed < 0 & s.wheelThrottle < 0) { s.wheelThrottle = 0; } // don't go backwards
-					if (Mathf.Sign(act) + Mathf.Sign(s.wheelThrottle) == 0) { s.wheelThrottle = Mathf.Clamp(act, -1f, 1f); }
-					if (speedErr < -1 && StabilityControl && Mathf.Sign(s.wheelThrottle) + Mathf.Sign(curSpeed) == 0) {
+//					if (speedErr < -1 && StabilityControl && Mathf.Sign(s.wheelThrottle) + Mathf.Sign(curSpeed) == 0) {
+					if (Math.Abs(speedErr) > 1 && StabilityControl && !SameSign(s.wheelThrottle, curSpeed)) {
 						brake = true;
 					}
-
-//					lastThrottle = Mathf.Clamp(s.wheelThrottle, -1, 1);
 				}
 
 				Profiler.EndSample();
@@ -542,7 +562,7 @@ boed = true;
 				}
 
 				// energy low, going in the right direction: coast, save remaining energy by not using it for acceleration
-				else if (energyLeft <= 5 && Mathf.Sign(s.wheelThrottle) + Mathf.Sign(curSpeed) != 0)
+				else if (energyLeft <= 5 && SameSign(s.wheelThrottle, curSpeed))
 				{
 boed = true;
 					s.wheelThrottle = 0;
@@ -559,13 +579,20 @@ boed = true;
 
 //				// TODO: overriding tgtSpeed here has no effect
 //				if (openSolars || energyLeft <= 3) { tgtSpeed = 0; }
+if (energyLeft <= 3 && StabilityControl)
+{
+boed = true;
+	s.wheelThrottle = 0;
+	brake = true;
+}
+
 //				if (curSpeed < brakeSpeedLimit && (energyLeft <= 5 || openSolars))
 //				vessel.FindPartModulesImplementing<ModuleDeployableSolarPanel>().FindAll(p => p.deployState == ModuleDeployablePart.DeployState.EXTENDED).Count > 0)
 
 				Profiler.EndSample();
 			}
 
-			if (s.wheelThrottle != 0 && (Mathf.Sign(s.wheelThrottle) + Mathf.Sign(curSpeed) != 0 || curSpeed < 1f))
+			if (s.wheelThrottle != 0 && (SameSign(s.wheelThrottle, curSpeed) || curSpeed < 1f))
 			{
 				brake = false; // the AP or user want to drive into the direction of momentum so release the brake
 			}
@@ -590,6 +617,9 @@ boed = true;
 			{
 				s.wheelThrottle = 0;
 			}
+
+lastThrottle = (int)(s.wheelThrottle * 100);
+lastSteer = (int)(s.wheelSteer * 100);
 
 //			Profiler.EndSample();
 		}
