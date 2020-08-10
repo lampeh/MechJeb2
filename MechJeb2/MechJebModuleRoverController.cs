@@ -19,10 +19,6 @@ namespace MuMech
 		public List<MechJebWaypoint> Waypoints = new List<MechJebWaypoint>();
 		public MuMech.MovingAverage etaSpeed = new MovingAverage(50);
 
-public bool boed = false;
-public bool boedw = false;
-public bool bob = false;
-
 
 		[ToggleInfoItem("#MechJeb_ControlHeading", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Local)] // Heading control
 		public bool ControlHeading;
@@ -112,6 +108,7 @@ public bool bob = false;
 		private double lastETA = 0;
 
 		private float curSpeed;
+		private float curSpeedAbs;
 
 		private List<ModuleWheelBase> wheelbases;
 
@@ -137,7 +134,7 @@ public bool bob = false;
 		public int lastSteer = 0;
 
 
-		// TODO: is this how it's done? why not !=?
+		// TODO: is this how it's done? why not ==?
 		// TODO: Unity's Mathf.Sign returns 1 if val is 0, does that matter?
 		private static bool SameSign(float val1, float val2)
 		{
@@ -332,6 +329,7 @@ print("MJRC: not my scene");
 
 			// "forward" portion of surface velocity vector
 			curSpeed = Vector3.Dot(vesselState.surfaceVelocity, vesselState.forward);
+			curSpeedAbs = Mathf.Abs(curSpeed);
 
 			// TODO: differentiate traction limits for driving, braking, steering?
 			CalculateTraction();
@@ -436,17 +434,17 @@ print("MJRC: not my scene");
 				headingPID.intAccum = Mathf.Clamp((float)headingPID.intAccum, -1f, 1f);
 
 				headingErr = MuUtils.ClampDegrees180(vesselState.rotationVesselSurface.eulerAngles.y - heading);
-if (curSpeed < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); }
+if (curSpeed < -float.Epsilon) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); }
 
 				if (s.wheelSteer == s.wheelSteerTrim || !vessel.isActiveVessel)
 				{
 					// turnSpeed needs to be higher than curSpeed or it will never steer as much as it could even at 0.2m/s above it
-					float limit = (Mathf.Abs(curSpeed) > turnSpeed ? Mathf.Clamp((float)((turnSpeed + 6) / (curSpeed*curSpeed)), 0.1f, 1f) : 1f);
+					float limit = curSpeedAbs > turnSpeed ? Mathf.Clamp((float)((turnSpeed + 6) / (curSpeed*curSpeed)), 0.1f, 1f) : 1f;
 //float limit = 1f;
 
 					// double act = headingPID.Compute(headingErr * headingErr / 10 * Mathf.Sign(headingErr));
 					float act = (float)headingPID.Compute(headingErr);
-if (curSpeed < 0) { act = -act; }
+if (curSpeed < -float.Epsilon) { act = -act; }
 
 					// prevents it from flying above a waypoint and landing with steering at max while still going fast
 					if (traction >= tractionLimit)
@@ -517,8 +515,6 @@ if (curSpeed < 0) { act = -act; }
 				Profiler.EndSample();
 			}
 
-boed = false;
-
 			// TODO: collect a list of batteries and panels and update in OnVesselWasModified?
 			// TODO: identify key points in expected behaviour
 			// TODO: check Kopernicus solar panels, do they implement ModuleDeployableSolarPanel
@@ -551,10 +547,14 @@ boed = false;
 					foreach (var p in solarPanels) { p.Retract(); };
 				}
 
+if (energyLeft <= 10 && curSpeedAbs <= brakeSpeedLimit && brake)
+{
+	s.wheelThrottle = 0;
+}
+
 				// 5% left, going slow: stop and open solar panels
-				if (energyLeft <= 5 && curSpeed <= brakeSpeedLimit)
+				if (energyLeft <= 5 && curSpeedAbs <= brakeSpeedLimit)
 				{
-boed = true;
 					s.wheelThrottle = 0;
 					brake = true;
 
@@ -564,7 +564,6 @@ boed = true;
 				// energy low, going in the right direction: coast, save remaining energy by not using it for acceleration
 				else if (energyLeft <= 5 && SameSign(s.wheelThrottle, curSpeed))
 				{
-boed = true;
 					s.wheelThrottle = 0;
 				}
 
@@ -572,7 +571,7 @@ boed = true;
 				// (speed control should have applied the brakes already)
 
 				// enerygy low, (almost) stopped, any open solar panels: ready for time warp
-				if (energyLeft <= 5 && curSpeed <= 0.1f && !waitingForDaylight && openSolars)
+				if (energyLeft <= 5 && curSpeedAbs <= 0.1f && !waitingForDaylight && openSolars)
 				{
 					waitingForDaylight = true;
 				}
@@ -581,7 +580,6 @@ boed = true;
 //				if (openSolars || energyLeft <= 3) { tgtSpeed = 0; }
 if (energyLeft <= 3 && StabilityControl)
 {
-boed = true;
 	s.wheelThrottle = 0;
 	brake = true;
 }
@@ -592,7 +590,7 @@ boed = true;
 				Profiler.EndSample();
 			}
 
-			if (s.wheelThrottle != 0 && (SameSign(s.wheelThrottle, curSpeed) || curSpeed < 1f))
+			if (s.wheelThrottle != 0 && (SameSign(s.wheelThrottle, curSpeed) || curSpeedAbs < 1f))
 			{
 				brake = false; // the AP or user want to drive into the direction of momentum so release the brake
 			}
@@ -613,7 +611,7 @@ boed = true;
 
 			// only let go of the brake when losing traction if the AP is driving, otherwise assume the player knows when to let go of it
 			// also to not constantly turn off the parking brake from going over a small bump
-			if (brake && curSpeed < 0.1f)
+			if (brake && curSpeedAbs <= 0.1f)
 			{
 				s.wheelThrottle = 0;
 			}
@@ -647,7 +645,7 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no fixedupdate"); return; }
 
 			if (lastETA + 0.2 < DateTime.Now.TimeOfDay.TotalSeconds)
 			{
-				etaSpeed.value = curSpeed;
+				etaSpeed.value = curSpeedAbs;
 				lastETA = DateTime.Now.TimeOfDay.TotalSeconds;
 			}
 
@@ -666,8 +664,6 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no fixedupdate"); return; }
 if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no update"); return; }
 
 //			Profiler.BeginSample("OnUpdate");
-
-boedw = false;
 
 			if (WarpToDaylight && waitingForDaylight && vessel.isActiveVessel)
 			{
@@ -690,7 +686,6 @@ EnergyLeft();
 				}
 				else
 				{
-boedw = true;
 					// TODO: get out of phys warp first?
 					core.warp.WarpRegularAtRate(energyLeft < 90 ? 1000 : 50);
 				}
