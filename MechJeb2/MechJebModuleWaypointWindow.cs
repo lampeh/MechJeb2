@@ -784,7 +784,7 @@ namespace MuMech
 					ed.registry.Find(i => i.id == "Editable:RoverController.terrainLookAhead").DrawItem();
 //					ed.registry.Find(i => i.id == "Value:RoverController.speedIntAcc").DrawItem();
 					ed.registry.Find(i => i.id == "Editable:RoverController.tractionLimit").DrawItem();
-					ed.registry.Find(i => i.id == "Toggle:RoverController.LimitAcceleration").DrawItem();
+//					ed.registry.Find(i => i.id == "Toggle:RoverController.LimitAcceleration").DrawItem();
 					GUILayout.EndVertical();
 
 					GUILayout.BeginVertical();

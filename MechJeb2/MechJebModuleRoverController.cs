@@ -17,7 +17,7 @@ namespace MuMech
 
 		public int WaypointIndex = -1;
 		public List<MechJebWaypoint> Waypoints = new List<MechJebWaypoint>();
-		public MuMech.MovingAverage etaSpeed = new MovingAverage(50);
+		public MuMech.MovingAverage etaSpeed = new MovingAverage(50); // TODO: maybe rename avgSpeed?
 
 
 		[ToggleInfoItem("#MechJeb_ControlHeading", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Local)] // Heading control
@@ -53,17 +53,18 @@ namespace MuMech
 		// TODO: "warp to daylight" really is "warp til recharged"
 		[ToggleInfoItem("#MechJeb_WarpToDaylight", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Local)] // Warp until Day if Depleted
 		public bool WarpToDaylight = false;
-
 /*
 		// TODO: brake if a wheel broke
 		[ToggleInfoItem("#MechJeb_BrakeOnBreak", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Local)] // Brake on Broken Wheels
 		public bool BrakeOnBreak = false;
 */
 
+
+/*
 		// TODO: no longer implemented
 		[ToggleInfoItem("#MechJeb_LimitAcceleration", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Local | (int)Pass.Type)] // Limit Acceleration
 		public bool LimitAcceleration = false;
-
+*/
 		[EditableInfoItem("#MechJeb_SafeTurnspeed", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Type)] // Safe turnspeed
 		public EditableDouble turnSpeed = 3;
 
@@ -185,6 +186,7 @@ namespace MuMech
 			// collect modules for ground contact check
 			// TODO: what if a part has multiple ModuleWheelBase?
 			// TODO: does every wheel has a ModuleWheelBase? check wheel part mods
+			// TODO: MechJebModuleSpaceplaneAutopilot uses heading control - check landing gear parts
 			// TODO: check for brakes / motorized / broken wheels?
 			// TODO: heading control could use a list of steerable wheels instead
 			return v.Parts.Where(
@@ -243,7 +245,7 @@ namespace MuMech
 		// ramp down from speed to turnSpeed with increasing heading error
 		// TODO: only used by waypoint AP, not speed or heading control. should it?
 		// TODO: consider traction of steerable wheels?
-		// TODO: m/s / ° / 3
+		// TODO: m/s / ° / 3?
 		private float TurningSpeed(double speed, double error)
 		{
 			return Mathf.Max((float)speed / Mathf.Max(Mathf.Abs((float)error) / 3f, 1f), (float)turnSpeed);
@@ -256,12 +258,9 @@ namespace MuMech
 
 			base.OnStart(state);
 
+			// TODO: could this module potentially be asked to Drive in other scenes?
 			if (!HighLogic.LoadedSceneIsFlight)
-			{
-// TODO: could this module potentially be asked to Drive in other scenes?
-print("MJRC: not my scene");
 				return;
-			}
 
 			headingPID = new PIDController(hPIDp, hPIDi, hPIDd);
 			speedPID = new PIDController(sPIDp, sPIDi, sPIDd);
@@ -329,7 +328,9 @@ print("MJRC: not my scene");
 
 			// "forward" portion of surface velocity vector
 			curSpeed = Vector3.Dot(vesselState.surfaceVelocity, vesselState.forward);
+
 			curSpeedAbs = Mathf.Abs(curSpeed);
+			float curSpeedSign = Mathf.Sign(curSpeed);
 
 			// TODO: differentiate traction limits for driving, braking, steering?
 			CalculateTraction();
@@ -434,7 +435,7 @@ print("MJRC: not my scene");
 				headingPID.intAccum = Mathf.Clamp((float)headingPID.intAccum, -1f, 1f);
 
 				headingErr = MuUtils.ClampDegrees180(vesselState.rotationVesselSurface.eulerAngles.y - heading);
-if (curSpeed < -float.Epsilon) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); }
+if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); }
 
 				if (s.wheelSteer == s.wheelSteerTrim || !vessel.isActiveVessel)
 				{
@@ -443,8 +444,7 @@ if (curSpeed < -float.Epsilon) { headingErr = MuUtils.ClampDegrees180(headingErr
 //float limit = 1f;
 
 					// double act = headingPID.Compute(headingErr * headingErr / 10 * Mathf.Sign(headingErr));
-					float act = (float)headingPID.Compute(headingErr);
-if (curSpeed < -float.Epsilon) { act = -act; }
+					float act = (float)headingPID.Compute(headingErr) * curSpeedSign;
 
 					// prevents it from flying above a waypoint and landing with steering at max while still going fast
 					if (traction >= tractionLimit)
@@ -493,24 +493,44 @@ if (curSpeed < -float.Epsilon) { act = -act; }
 //					line.enabled = true;
 				}
 
-				// TODO: maybe tap into KER's impact predictor if available?
-				RaycastHit hit;
-				Physics.Raycast(vessel.CoM + vesselState.surfaceVelocity * terrainLookAhead + vesselState.up * 100, -vesselState.up, out hit, 500, 1 << 15, QueryTriggerInteraction.Ignore);
-				Vector3 norm = hit.normal;
-
-				Vector3 fwd = (Vector3)(traction > 0 ?
-					vesselState.forward * 4f - vessel.transform.right * s.wheelSteer * Mathf.Sign(curSpeed) :
-					vesselState.surfaceVelocity); // in the air so follow velocity
-				Vector3.OrthoNormalize(ref norm, ref fwd);
-				Quaternion quat = Quaternion.LookRotation(fwd, norm);
-
-//				line.SetPosition(0, vessel.CoM);
-//				line.SetPosition(1, vessel.CoM + norm * 5);
-//				float scale = Vector3.Distance(FlightCamera.fetch.mainCamera.transform.position, vessel.CoM) / 900f;
-//				line.SetWidth(0, scale + 0.1f);
-
 				if (vesselState.torqueAvailable.sqrMagnitude > 0)
+				{
+					// TODO: maybe tap into KER's impact predictor if available?
+					// TODO: what does CelestialBody.GetImpactLatitudeAndLongitude() do?
+					// TODO: consider actual attitude control delay instead of fixed terrainLookAhead?
+					// TODO: resolve sign confusion
+
+					Vector3 fwd = (traction > 0 ? // TODO: use traction limit? what about side slip?
+						vesselState.forward * 4f - vessel.transform.right * s.wheelSteer * curSpeedSign : // TODO: why *4? momentum? why not *curSpeed?
+//						(vesselState.forward * 4f - vessel.transform.right * s.wheelSteer * curSpeedSign) * curSpeed / 4f : // TODO: why *4? momentum? why not *curSpeed?
+						vesselState.surfaceVelocity * curSpeedSign); // in the air so follow velocity
+
+					// cast a ray downwards from 100 units above the rover's expected position in terrainLookAhead seconds
+					RaycastHit hit;
+					Vector3 norm;
+					if (Physics.Raycast(vessel.CoM + fwd * curSpeedSign * (float)terrainLookAhead + vesselState.up * 100, -vesselState.up, out hit, 500, 1 << 15, QueryTriggerInteraction.Ignore))
+						norm = hit.normal; // terrain slope
+					else
+						norm = vesselState.up; // no terrain in raydar range, just keep it level
+
+// TODO: think again - rotate up, not flip?
+//fwd = Vector3.ProjectOnPlane(fwd, vesselState.up);
+//fwd *= curSpeedSign;
+
+					// assume the post-impact velocity follows the surface
+					Vector3.OrthoNormalize(ref norm, ref fwd);
+
+					// point the craft forward, perpendicular to the surface
+					Quaternion quat = Quaternion.LookRotation(fwd, norm);
+
+//					line.SetPosition(0, vessel.CoM);
+//					line.SetPosition(1, vessel.CoM + norm * 5);
+//					float scale = Vector3.Distance(FlightCamera.fetch.mainCamera.transform.position, vessel.CoM) / 900f;
+//					line.SetWidth(0, scale + 0.1f);
+
+					// TODO: limit attitude controller roll limiter?
 					core.attitude.attitudeTo(quat, AttitudeReference.INERTIAL, this);
+				}
 
 				Profiler.EndSample();
 			}
@@ -544,13 +564,9 @@ if (curSpeed < -float.Epsilon) { act = -act; }
 				// batteries full: retract panels
 				if (energyLeft >= 99 && openSolars)
 				{
-					foreach (var p in solarPanels) { p.Retract(); };
+					foreach (var p in solarPanels)
+						p.Retract();
 				}
-
-if (energyLeft <= 10 && curSpeedAbs <= brakeSpeedLimit && brake)
-{
-	s.wheelThrottle = 0;
-}
 
 				// 5% left, going slow: stop and open solar panels
 				if (energyLeft <= 5 && curSpeedAbs <= brakeSpeedLimit)
@@ -558,7 +574,8 @@ if (energyLeft <= 10 && curSpeedAbs <= brakeSpeedLimit && brake)
 					s.wheelThrottle = 0;
 					brake = true;
 
-					foreach (var p in solarPanels) { p.Extend(); };
+					foreach (var p in solarPanels)
+						p.Extend();
 				}
 
 				// energy low, going in the right direction: coast, save remaining energy by not using it for acceleration
@@ -568,29 +585,29 @@ if (energyLeft <= 10 && curSpeedAbs <= brakeSpeedLimit && brake)
 				}
 
 				// TODO: what about energy low, *not* going in the right direction (i.e. rolling down the hill)
-				// (speed control should have applied the brakes already)
+				// (speed control should have applied the brakes already, right?)
 
 				// enerygy low, (almost) stopped, any open solar panels: ready for time warp
-				if (energyLeft <= 5 && curSpeedAbs <= 0.1f && !waitingForDaylight && openSolars)
+				if (energyLeft <= 5 && curSpeedAbs < 0.1f && !waitingForDaylight && openSolars)
 				{
 					waitingForDaylight = true;
 				}
 
 //				// TODO: overriding tgtSpeed here has no effect
 //				if (openSolars || energyLeft <= 3) { tgtSpeed = 0; }
-if (energyLeft <= 3 && StabilityControl)
-{
-	s.wheelThrottle = 0;
-	brake = true;
-}
-
 //				if (curSpeed < brakeSpeedLimit && (energyLeft <= 5 || openSolars))
-//				vessel.FindPartModulesImplementing<ModuleDeployableSolarPanel>().FindAll(p => p.deployState == ModuleDeployablePart.DeployState.EXTENDED).Count > 0)
+
+				// energy very low, stability control enabled: brake while the reaction wheels still have power
+				if (energyLeft <= 3 && StabilityControl)
+				{
+					s.wheelThrottle = 0;
+					brake = true;
+				}
 
 				Profiler.EndSample();
 			}
 
-			if (s.wheelThrottle != 0 && (SameSign(s.wheelThrottle, curSpeed) || curSpeedAbs < 1f))
+			if (brake && s.wheelThrottle != 0 && (SameSign(s.wheelThrottle, curSpeed) || curSpeedAbs < 1f))
 			{
 				brake = false; // the AP or user want to drive into the direction of momentum so release the brake
 			}
@@ -611,7 +628,7 @@ if (energyLeft <= 3 && StabilityControl)
 
 			// only let go of the brake when losing traction if the AP is driving, otherwise assume the player knows when to let go of it
 			// also to not constantly turn off the parking brake from going over a small bump
-			if (brake && curSpeedAbs <= 0.1f)
+			if (brake && curSpeedAbs < 0.1f)
 			{
 				s.wheelThrottle = 0;
 			}
@@ -643,6 +660,7 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no fixedupdate"); return; }
 			speedPID.Ki = sPIDi;
 			speedPID.Kd = sPIDd;
 
+			// max. 5 samples per second -> 10-second average
 			if (lastETA + 0.2 < DateTime.Now.TimeOfDay.TotalSeconds)
 			{
 				etaSpeed.value = curSpeedAbs;
@@ -672,13 +690,14 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no update"); return; }
 //				var batteries = vessel.Parts.FindAll(p => p.Resources.Contains(PartResourceLibrary.ElectricityHashcode) && p.Resources.Get(PartResourceLibrary.ElectricityHashcode).flowState);
 //				var energyLeft = batteries.Sum(p => p.Resources.Get(PartResourceLibrary.ElectricityHashcode).amount) / batteries.Sum(p => p.Resources.Get(PartResourceLibrary.ElectricityHashcode).maxAmount);
 
-EnergyLeft();
+				EnergyLeft();
 
 				bool openSolars = vessel.FindPartModulesImplementing<ModuleDeployableSolarPanel>().Where(p =>
 					p.deployState == ModuleDeployablePart.DeployState.EXTENDED
 				).Any();
 
 				// batteries full or no solar panels extended: deactivate warp
+				// TODO: prevents player from time-warping with closed/broken/no solar panels
 				if (energyLeft >= 99 || !openSolars)
 				{
 					waitingForDaylight = false;
