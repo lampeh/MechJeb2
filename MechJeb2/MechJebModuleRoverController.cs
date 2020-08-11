@@ -146,10 +146,11 @@ namespace MuMech
 		private static float HeadingToPos(Vector3 fromPos, Vector3 toPos, CelestialBody body)
 		{
 			// thanks to Cilph who did most of this since I don't understand anything ~ BR2k
-			Vector3 myPos = fromPos - body.transform.position; // position relative to body origin
+			Vector3 myPos = fromPos - body.transform.position; // position relative to body origin, "up" vector
 			Vector3 tgtPos = toPos - fromPos; // vector towards target
 			Vector3 north = body.transform.position + (body.transform.up * (float)body.Radius) - fromPos; // vector towards north pole
 			float sign = (MuUtils.ClampDegrees360(body.GetLongitude(toPos) - body.GetLongitude(fromPos)) > 180) ? -1f : 1f; // positively eastwards
+			// take angle between north and target mapped onto horizontal plane
 			return sign * Vector3.Angle(Vector3.ProjectOnPlane(north.normalized, myPos.normalized), Vector3.ProjectOnPlane(tgtPos.normalized, myPos.normalized));
 		}
 
@@ -435,6 +436,7 @@ namespace MuMech
 				headingPID.intAccum = Mathf.Clamp((float)headingPID.intAccum, -1f, 1f);
 
 				headingErr = MuUtils.ClampDegrees180(vesselState.rotationVesselSurface.eulerAngles.y - heading);
+// TODO: what should heading control do when driving backwards? keep forward heading or direction?
 if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); }
 
 				if (s.wheelSteer == s.wheelSteerTrim || !vessel.isActiveVessel)
@@ -474,7 +476,6 @@ if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); 
 
 					s.wheelThrottle = Mathf.Clamp(act, -1f, 1f);
 
-//					if (speedErr < -1 && StabilityControl && Mathf.Sign(s.wheelThrottle) + Mathf.Sign(curSpeed) == 0) {
 					if (Math.Abs(speedErr) > 1 && StabilityControl && !SameSign(s.wheelThrottle, curSpeed)) {
 						brake = true;
 					}
@@ -523,13 +524,13 @@ if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); 
 					// point the craft forward, perpendicular to the surface
 					Quaternion quat = Quaternion.LookRotation(fwd, norm);
 
+					// TODO: limit attitude controller roll limiter?
+					core.attitude.attitudeTo(quat, AttitudeReference.INERTIAL, this);
+
 //					line.SetPosition(0, vessel.CoM);
 //					line.SetPosition(1, vessel.CoM + norm * 5);
 //					float scale = Vector3.Distance(FlightCamera.fetch.mainCamera.transform.position, vessel.CoM) / 900f;
 //					line.SetWidth(0, scale + 0.1f);
-
-					// TODO: limit attitude controller roll limiter?
-					core.attitude.attitudeTo(quat, AttitudeReference.INERTIAL, this);
 				}
 
 				Profiler.EndSample();
@@ -544,11 +545,6 @@ if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); 
 			if (BrakeOnEnergyDepletion)
 			{
 				Profiler.BeginSample("BrakeOnEnergyDepletion");
-
-//				var batteries = vessel.Parts.FindAll(p => p.Resources.Contains(PartResourceLibrary.ElectricityHashcode) && p.Resources.Get(PartResourceLibrary.ElectricityHashcode).flowState);
-//				var energyLeft = batteries.Sum(p => p.Resources.Get(PartResourceLibrary.ElectricityHashcode).amount) / batteries.Sum(p => p.Resources.Get(PartResourceLibrary.ElectricityHashcode).maxAmount);
-//				var openSolars = vessel.mainBody.atmosphere && // true if in atmosphere and there are breakable solarpanels that aren't broken nor retracted
-//				var openSolars = vessel.FindPartModulesImplementing<ModuleDeployableSolarPanel>().FindAll(p => p.isBreakable && p.deployState != ModuleDeployablePart.DeployState.BROKEN && p.deployState != ModuleDeployablePart.DeployState.RETRACTED).Count > 0;
 
 				// TODO: move to (Fixed)Update?
 				EnergyLeft();
@@ -686,9 +682,6 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no update"); return; }
 			if (WarpToDaylight && waitingForDaylight && vessel.isActiveVessel)
 			{
 				Profiler.BeginSample("BrakeOnEnergyDepletion");
-
-//				var batteries = vessel.Parts.FindAll(p => p.Resources.Contains(PartResourceLibrary.ElectricityHashcode) && p.Resources.Get(PartResourceLibrary.ElectricityHashcode).flowState);
-//				var energyLeft = batteries.Sum(p => p.Resources.Get(PartResourceLibrary.ElectricityHashcode).amount) / batteries.Sum(p => p.Resources.Get(PartResourceLibrary.ElectricityHashcode).maxAmount);
 
 				EnergyLeft();
 
