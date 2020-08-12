@@ -143,22 +143,23 @@ namespace MuMech
 		}
 
 
-		private static float HeadingToPos(Vector3 fromPos, Vector3 toPos, CelestialBody body)
+		private static float HeadingToPos(Vector3 fromPos, Vector3 toPos, Transform origin)
 		{
 			// thanks to Cilph who did most of this since I don't understand anything ~ BR2k
-			Vector3 myPos = fromPos - body.transform.position; // position relative to body origin, "up" vector
-			myPos.Normalize();
+			Vector3 up = fromPos - origin.position; // position relative to origin, "up" vector
+			up.Normalize();
 
-			Vector3 north = body.transform.up - myPos; // vector towards north pole
-			Vector3 tgtPos = toPos - fromPos; // vector towards target
+			// mark north and target directions on horizontal plane
+			Vector3 north = Vector3.ProjectOnPlane(origin.up, up);
+			Vector3 target = Vector3.ProjectOnPlane((toPos - fromPos).normalized, up);
 
-			// take angle between north and target mapped onto horizontal plane
-			return Vector3.SignedAngle(Vector3.ProjectOnPlane(north, myPos), Vector3.ProjectOnPlane(tgtPos.normalized, myPos), myPos);
+			// apply protractor
+			return Vector3.SignedAngle(north, target, up);
 		}
 
 		private float HeadingToPos(Vector3 fromPos, Vector3 toPos)
 		{
-			return HeadingToPos(fromPos, toPos, mainBody);
+			return HeadingToPos(fromPos, toPos, mainBody.transform);
 		}
 
 
@@ -205,7 +206,7 @@ namespace MuMech
 			if (v == vessel)
 			{
 				// TODO: re-use list?
-				wheelbases = CountWheels(v);
+				wheelbases = null;
 			}
 			Profiler.EndSample();
 		}
@@ -215,7 +216,7 @@ namespace MuMech
 			Profiler.BeginSample("CalculateTraction");
 
 			if (wheelbases == null)
-				OnVesselWasModified(vessel);
+				wheelbases = CountWheels(vessel);
 
 			// sum up percentage of wheels in ground contact
 //			traction = wheelbases.Count > 0 ? wheelbases.Sum(p => p.isGrounded ? 100 : 0) / wheelbases.Count : 0;
@@ -293,9 +294,9 @@ namespace MuMech
 		{
 			Profiler.BeginSample("OnModuleEnabled");
 
-			GameEvents.onVesselWasModified.Add(OnVesselWasModified);
-
 			base.OnModuleEnabled();
+
+			GameEvents.onVesselWasModified.Add(OnVesselWasModified);
 
 			Profiler.EndSample();
 		}
@@ -303,8 +304,6 @@ namespace MuMech
 		public override void OnModuleDisabled()
 		{
 			Profiler.BeginSample("OnModuleDisabled");
-
-			// TODO: clear out wheelbases, unregister GameEvent?
 
 			GameEvents.onVesselWasModified.Remove(OnVesselWasModified);
 			wheelbases = null;
@@ -548,6 +547,7 @@ if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); 
 //					float scale = Vector3.Distance(FlightCamera.fetch.mainCamera.transform.position, vessel.CoM) / 900f;
 //					line.SetWidth(0, scale + 0.1f);
 				}
+else { core.attitude.attitudeDeactivate(); }
 
 				Profiler.EndSample();
 			}
@@ -678,13 +678,38 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no fixedupdate"); return; }
 				lastETA = DateTime.Now.TimeOfDay.TotalSeconds;
 			}
 
-			// TODO: what does RoverWindow.OnUpdate() do, anyway?
-/*
-			if (!core.GetComputerModule<MechJebModuleRoverWindow>().enabled)
+			if (!StabilityControl && core.attitude.users.Contains(this))
 			{
+				core.attitude.attitudeDeactivate();
+				core.attitude.users.Remove(this);
+			}
+
+			// TODO: what does RoverWindow.OnUpdate() do, anyway?
+			// it updates the menu highlight when another module activates the AP (SpaceplaneAutopilot)
+			// and keeps the module running while the autopilot is active even if the other module unregisters
+			// then shuts the controller down, e.g. after reaching the final waypoint
+
+			if (!core.GetComputerModule<MechJebModuleRoverWindow>().enabled)
 				core.GetComputerModule<MechJebModuleRoverWindow>().OnUpdate(); // update users for Stability Control, Brake on Eject and Brake on Energy Depletion
+
+/*
+			ComputerModule controllerWindow = core.GetComputerModule<MechJebModuleRoverWindow>();
+			if (!controllerWindow.enabled)
+			{
+				if (ControlHeading || ControlSpeed || StabilityControl || BrakeOnEnergyDepletion || BrakeOnEject)
+				{
+					// possibly unreachable code if module is not enabled
+					if (!users.Contains(controllerWindow))
+						users.Add(controllerWindow);
+				}
+				else if (users.Contains(controllerWindow))
+				{
+					// disables module if no other users
+					users.Remove(controllerWindow);
+				}
 			}
 */
+
 //			Profiler.EndSample();
 		}
 
@@ -725,6 +750,7 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no update"); return; }
 				waitingForDaylight = false;
 			}
 
+/*
 			if (!core.GetComputerModule<MechJebModuleRoverWindow>().enabled)
 			{
 				core.GetComputerModule<MechJebModuleRoverWindow>().OnUpdate(); // update users for Stability Control, Brake on Eject and Brake on Energy Depletion
@@ -735,6 +761,8 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no update"); return; }
 				core.attitude.attitudeDeactivate();
 				core.attitude.users.Remove(this);
 			}
+*/
+
 
 //			Profiler.EndSample();
 		}
