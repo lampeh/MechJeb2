@@ -147,11 +147,13 @@ namespace MuMech
 		{
 			// thanks to Cilph who did most of this since I don't understand anything ~ BR2k
 			Vector3 myPos = fromPos - body.transform.position; // position relative to body origin, "up" vector
+			myPos.Normalize();
+
+			Vector3 north = body.transform.up - myPos; // vector towards north pole
 			Vector3 tgtPos = toPos - fromPos; // vector towards target
-			Vector3 north = body.transform.position + (body.transform.up * (float)body.Radius) - fromPos; // vector towards north pole
-			float sign = (MuUtils.ClampDegrees360(body.GetLongitude(toPos) - body.GetLongitude(fromPos)) > 180) ? -1f : 1f; // positively eastwards
+
 			// take angle between north and target mapped onto horizontal plane
-			return sign * Vector3.Angle(Vector3.ProjectOnPlane(north.normalized, myPos.normalized), Vector3.ProjectOnPlane(tgtPos.normalized, myPos.normalized));
+			return Vector3.SignedAngle(Vector3.ProjectOnPlane(north, myPos), Vector3.ProjectOnPlane(tgtPos.normalized, myPos), myPos);
 		}
 
 		private float HeadingToPos(Vector3 fromPos, Vector3 toPos)
@@ -271,7 +273,7 @@ namespace MuMech
 //			MechJebRouteRenderer.NewLineRenderer(ref line);
 //			line.enabled = false;
 
-			GameEvents.onVesselWasModified.Add(OnVesselWasModified);
+//			GameEvents.onVesselWasModified.Add(OnVesselWasModified);
 
 			Profiler.EndSample();
 		}
@@ -287,11 +289,25 @@ namespace MuMech
 			Profiler.EndSample();
 		}
 
+		public override void OnModuleEnabled()
+		{
+			Profiler.BeginSample("OnModuleEnabled");
+
+			GameEvents.onVesselWasModified.Add(OnVesselWasModified);
+
+			base.OnModuleEnabled();
+
+			Profiler.EndSample();
+		}
+
 		public override void OnModuleDisabled()
 		{
 			Profiler.BeginSample("OnModuleDisabled");
 
 			// TODO: clear out wheelbases, unregister GameEvent?
+
+			GameEvents.onVesselWasModified.Remove(OnVesselWasModified);
+			wheelbases = null;
 
 			if (core.attitude.users.Contains(this))
 			{
@@ -370,7 +386,8 @@ namespace MuMech
 					{
 						if (WaypointIndex + 1 >= Waypoints.Count) // last waypoint
 						{
-							newSpeed = new [] { newSpeed, (distance < radius * 0.8 ? 0 : 1) }.Min();
+//							newSpeed = new [] { newSpeed, (distance < radius * 0.8 ? 0 : 1) }.Min();
+							newSpeed = Mathf.Min(newSpeed, (distance < radius * 0.8f) ? 0f : 1f);
 							// ^ limit speed so it'll only go from 1m/s to full stop when braking to prevent accidents on moons
 							if (LoopWaypoints)
 							{
@@ -421,7 +438,7 @@ namespace MuMech
 							}
 						}
 					}
-					brake = brake || ((s.wheelThrottle == 0 || !vessel.isActiveVessel) && curSpeed < brakeSpeedLimit && newSpeed < brakeSpeedLimit);
+					brake = brake || ((s.wheelThrottle == s.wheelThrottleTrim || !vessel.isActiveVessel) && curSpeed < brakeSpeedLimit && newSpeed < brakeSpeedLimit);
 					// ^ brake if needed to prevent rolling, hopefully
 					tgtSpeed = (newSpeed >= 0 ? newSpeed : 0);
 				}
@@ -433,20 +450,19 @@ namespace MuMech
 			{
 				Profiler.BeginSample("ControlHeading");
 
-				headingPID.intAccum = Mathf.Clamp((float)headingPID.intAccum, -1f, 1f);
-
 				headingErr = MuUtils.ClampDegrees180(vesselState.rotationVesselSurface.eulerAngles.y - heading);
 // TODO: what should heading control do when driving backwards? keep forward heading or direction?
 if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); }
 
 				if (s.wheelSteer == s.wheelSteerTrim || !vessel.isActiveVessel)
 				{
+					headingPID.intAccum = Mathf.Clamp((float)headingPID.intAccum, -1f, 1f);
+
+					float act = (float)headingPID.Compute(headingErr) * curSpeedSign;
+
 					// turnSpeed needs to be higher than curSpeed or it will never steer as much as it could even at 0.2m/s above it
 					float limit = curSpeedAbs > turnSpeed ? Mathf.Clamp((float)((turnSpeed + 6) / (curSpeed*curSpeed)), 0.1f, 1f) : 1f;
 //float limit = 1f;
-
-					// double act = headingPID.Compute(headingErr * headingErr / 10 * Mathf.Sign(headingErr));
-					float act = (float)headingPID.Compute(headingErr) * curSpeedSign;
 
 					// prevents it from flying above a waypoint and landing with steering at max while still going fast
 					if (traction >= tractionLimit)
@@ -466,15 +482,13 @@ if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); 
 			{
 				Profiler.BeginSample("ControlSpeed");
 
-				speedPID.intAccum = Mathf.Clamp((float)speedPID.intAccum, -5f, 5f);
-
 				speedErr = (WaypointIndex == -1 ? (double)speed : tgtSpeed) - curSpeed;
 
 				if (s.wheelThrottle == s.wheelThrottleTrim || !vessel.isActiveVessel)
 				{
-					float act = (float)speedPID.Compute(speedErr);
+					speedPID.intAccum = Mathf.Clamp((float)speedPID.intAccum, -5f, 5f);
 
-					s.wheelThrottle = Mathf.Clamp(act, -1f, 1f);
+					s.wheelThrottle = Mathf.Clamp((float)speedPID.Compute(speedErr), -1f, 1f);
 
 					if (Math.Abs(speedErr) > 1 && StabilityControl && !SameSign(s.wheelThrottle, curSpeed)) {
 						brake = true;
@@ -503,12 +517,13 @@ if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); 
 
 					Vector3 fwd = (traction > 0 ? // TODO: use traction limit? what about side slip?
 						vesselState.forward * 4f - vessel.transform.right * s.wheelSteer * curSpeedSign : // TODO: why *4? momentum? why not *curSpeed?
-//						(vesselState.forward * 4f - vessel.transform.right * s.wheelSteer * curSpeedSign) * curSpeed / 4f : // TODO: why *4? momentum? why not *curSpeed?
 						vesselState.surfaceVelocity * curSpeedSign); // in the air so follow velocity
 
 					// cast a ray downwards from 100 units above the rover's expected position in terrainLookAhead seconds
+
 					RaycastHit hit;
 					Vector3 norm;
+
 					if (Physics.Raycast(vessel.CoM + fwd * curSpeedSign * (float)terrainLookAhead + vesselState.up * 100, -vesselState.up, out hit, 500, 1 << 15, QueryTriggerInteraction.Ignore))
 						norm = hit.normal; // terrain slope
 					else
@@ -517,6 +532,7 @@ if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); 
 // TODO: think again - rotate up, not flip?
 //fwd = Vector3.ProjectOnPlane(fwd, vesselState.up);
 //fwd *= curSpeedSign;
+//if (fwd == Vector3.zero) { fwd = vesselState.forward; }
 
 					// assume the post-impact velocity follows the surface
 					Vector3.OrthoNormalize(ref norm, ref fwd);
@@ -549,6 +565,7 @@ if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); 
 				// TODO: move to (Fixed)Update?
 				EnergyLeft();
 
+				// TODO: use MechJebModuleSolarPanelController?
 				// TODO: why use only breakable panels?
 				IEnumerable<ModuleDeployableSolarPanel> solarPanels = vessel.FindPartModulesImplementing<ModuleDeployableSolarPanel>().Where(p =>
 					p.isBreakable &&
@@ -558,6 +575,7 @@ if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); 
 				bool openSolars = solarPanels.Any(p => p.deployState == ModuleDeployablePart.DeployState.EXTENDED);
 
 				// batteries full: retract panels
+				// TODO: wait for completion?
 				if (energyLeft >= 99 && openSolars)
 				{
 					foreach (var p in solarPanels)
@@ -581,7 +599,6 @@ if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); 
 				}
 
 				// TODO: what about energy low, *not* going in the right direction (i.e. rolling down the hill)
-				// (speed control should have applied the brakes already, right?)
 
 				// enerygy low, (almost) stopped, any open solar panels: ready for time warp
 				if (energyLeft <= 5 && curSpeedAbs < 0.1f && !waitingForDaylight && openSolars)
@@ -621,9 +638,9 @@ if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); 
 			}
 
 			vessel.ActionGroups.SetGroup(KSPActionGroup.Brakes, brake && (StabilityControl && (ControlHeading || ControlSpeed) ? traction >= tractionLimit : true));
-
 			// only let go of the brake when losing traction if the AP is driving, otherwise assume the player knows when to let go of it
 			// also to not constantly turn off the parking brake from going over a small bump
+
 			if (brake && curSpeedAbs < 0.1f)
 			{
 				s.wheelThrottle = 0;
@@ -640,8 +657,6 @@ lastSteer = (int)(s.wheelSteer * 100);
 if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no fixedupdate"); return; }
 
 //			Profiler.BeginSample("OnFixedUpdate");
-
-//			if (lastBody != mainBody) { lastBody = mainBody; }
 
 			if (!core.GetComputerModule<MechJebModuleWaypointWindow>().enabled)
 			{
@@ -699,6 +714,7 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no update"); return; }
 				else
 				{
 					// TODO: get out of phys warp first?
+					// TODO: warp faster through the night
 					core.warp.WarpRegularAtRate(energyLeft < 90 ? 1000 : 50);
 				}
 
