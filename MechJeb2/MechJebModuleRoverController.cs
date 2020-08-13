@@ -138,11 +138,11 @@ namespace MuMech
 		public int lastSteer = 0;
 
 
-		// TODO: is this how it's done? why not ==?
 		// TODO: Unity's Mathf.Sign returns 1 if val is 0, does that matter?
 		private static bool SameSign(float val1, float val2)
 		{
-			return Mathf.Sign(val1) + Mathf.Sign(val2) != 0;
+			return (Mathf.Sign(val1) + Mathf.Sign(val2)) != 0;
+//			return Mathf.Approximately(Mathf.Sign(val1), Mathf.Sign(val2));
 		}
 
 
@@ -254,9 +254,9 @@ namespace MuMech
 		// TODO: only used by waypoint AP, not speed or heading control. should it?
 		// TODO: consider traction of steerable wheels?
 		// TODO: m/s / ° / 3?
-		private float TurningSpeed(double speed, double error)
+		private float TurningSpeed(float speed, float error)
 		{
-			return Mathf.Max((float)speed / Mathf.Max(Mathf.Abs((float)error) / 3f, 1f), (float)turnSpeed);
+			return Mathf.Sign(speed) * Mathf.Max(Mathf.Abs(speed) / Mathf.Max(Mathf.Abs(error) / 3f, 1f), (float)turnSpeed);
 		}
 
 
@@ -364,12 +364,22 @@ namespace MuMech
 
 				if (ControlHeading)
 				{
+					Profiler.BeginSample("ControlHeading");
+
 					// TODO: maybe avoid obstacles?
-					heading.val = Math.Round(HeadingToPos(vessel.CoM, wp.Position), 1);
+					double newHeading = Math.Round(HeadingToPos(vessel.CoM, wp.Position), 1);
+
+					// update GUI text only if changed
+					if (newHeading != heading)
+						heading.val = newHeading;
+
+					Profiler.EndSample();
 				}
 
 				if (ControlSpeed)
 				{
+					Profiler.BeginSample("ControlSpeed");
+
 					MechJebWaypoint nextWP = (WaypointIndex < Waypoints.Count - 1 ? Waypoints[WaypointIndex + 1] : (LoopWaypoints ? Waypoints[0] : null));
 					float distance = Vector3.Distance(vessel.CoM, wp.Position);
 
@@ -378,37 +388,43 @@ namespace MuMech
 
 					float maxSpeed = (wp.MaxSpeed > 0 ? wp.MaxSpeed : (float)speed); // speed used to go towards the waypoint, using the waypoints maxSpeed if set or just stick with the set speed
 					float minSpeed = (wp.MinSpeed > 0 ? wp.MinSpeed :
-								   (nextWP != null ? TurningSpeed((nextWP.MaxSpeed > 0 ? nextWP.MaxSpeed : (float)speed), heading - HeadingToPos(wp.Position, nextWP.Position)) :
+								   (nextWP != null ? TurningSpeed((nextWP.MaxSpeed > 0 ? nextWP.MaxSpeed : (float)speed), (float)heading - HeadingToPos(wp.Position, nextWP.Position)) :
 								   (distance - wp.Radius > 50 ? (float)turnSpeed : 1)));
 					minSpeed = (wp.Quicksave ? 1 : minSpeed);
 					// ^ speed used to go through the waypoint, using half the set speed or maxSpeed as minSpeed for routing waypoints (all except the last)
 					float newSpeed = Mathf.Min(maxSpeed, Mathf.Max((distance - wp.Radius) / curSpeed, minSpeed)); // brake when getting closer
-					newSpeed = (newSpeed > turnSpeed ? TurningSpeed(newSpeed, headingErr) : newSpeed); // reduce speed when turning a lot
+					newSpeed = (newSpeed > turnSpeed ? TurningSpeed(newSpeed, (float)headingErr) : newSpeed); // reduce speed when turning a lot
 					float radius = Mathf.Max(wp.Radius, 10f);
 					if (distance < radius)
 					{
 						if (WaypointIndex + 1 >= Waypoints.Count) // last waypoint
 						{
-//							newSpeed = new [] { newSpeed, (distance < radius * 0.8 ? 0 : 1) }.Min();
-							newSpeed = Mathf.Min(newSpeed, (distance < radius * 0.8f) ? 0f : 1f);
-							// ^ limit speed so it'll only go from 1m/s to full stop when braking to prevent accidents on moons
-							if (LoopWaypoints)
+//							newSpeed = Mathf.Min(newSpeed, (distance < radius * 0.8f) ? 0f : 1f);
+//							// ^ limit speed so it'll only go from 1m/s to full stop when braking to prevent accidents on moons
+
+							if (LoopWaypoints && !wp.Quicksave)
 							{
 								WaypointIndex = 0;
 							}
 							else
 							{
 								newSpeed = 0;
-								brake = true;
+
 								if (curSpeed < brakeSpeedLimit)
 								{
 									if (wp.Quicksave)
 									{
-										//if (s.mainThrottle > 0) { s.mainThrottle = 0; }
 										if (FlightGlobals.ClearToSave() == ClearToSaveStatus.CLEAR)
 										{
-											WaypointIndex = -1;
-											ControlHeading = ControlSpeed = false;
+											if (LoopWaypoints)
+											{
+												WaypointIndex = 0;
+											}
+											else
+											{
+												WaypointIndex = -1;
+												ControlHeading = ControlSpeed = false;
+											}
 											QuickSaveLoad.QuickSave();
 										}
 									}
@@ -424,9 +440,9 @@ namespace MuMech
 						{
 							if (wp.Quicksave)
 							{
-								//if (s.mainThrottle > 0) { s.mainThrottle = 0; }
 								newSpeed = 0;
-								if (curSpeed < brakeSpeedLimit)
+
+								if (curSpeedAbs < brakeSpeedLimit)
 								{
 									if (FlightGlobals.ClearToSave() == ClearToSaveStatus.CLEAR)
 									{
@@ -441,9 +457,13 @@ namespace MuMech
 							}
 						}
 					}
-					brake = brake || ((Mathf.Approximately(s.wheelThrottle, s.wheelThrottleTrim) || !vessel.isActiveVessel) && curSpeed < brakeSpeedLimit && newSpeed < brakeSpeedLimit);
+
+					brake = brake || ((Mathf.Approximately(s.wheelThrottle, s.wheelThrottleTrim) || !vessel.isActiveVessel) && curSpeedAbs < brakeSpeedLimit && Mathf.Abs(newSpeed) < brakeSpeedLimit);
 					// ^ brake if needed to prevent rolling, hopefully
+
 					tgtSpeed = (newSpeed >= 0 ? newSpeed : 0);
+
+					Profiler.EndSample();
 				}
 
 				Profiler.EndSample();
@@ -454,8 +474,9 @@ namespace MuMech
 				Profiler.BeginSample("ControlHeading");
 
 				headingErr = MuUtils.ClampDegrees180(vesselState.currentHeading - heading);
-// TODO: what should heading control do when driving backwards? keep forward heading or direction?
-//if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); }
+
+				// TODO: what should heading control do when driving backwards? keep forward heading or direction?
+				//if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); }
 
 				if (Mathf.Approximately(s.wheelSteer, s.wheelSteerTrim) || !vessel.isActiveVessel)
 				{
@@ -468,7 +489,6 @@ namespace MuMech
 					{
 						// turnSpeed needs to be higher than curSpeed or it will never steer as much as it could even at 0.2m/s above it
 						float limit = curSpeedAbs > turnSpeed ? Mathf.Clamp((float)((turnSpeed + 6) / (curSpeed*curSpeed)), 0.1f, 1f) : 1f;
-//float limit = 1f;
 						s.wheelSteer = Mathf.Clamp(act, -limit, limit);
 					}
 				}
@@ -535,11 +555,11 @@ namespace MuMech
 
 // remove vertical component
 //fwd = Vector3.ProjectOnPlane(fwd, vesselState.up);
-fwd = Vector3.ProjectOnPlane(fwd, norm);
+fwd = Vector3.ProjectOnPlane(fwd.normalized, norm);
 if (fwd == Vector3.zero) { fwd = vesselState.forward; }
 
 					// point the craft forward, perpendicular to the surface
-					Vector3.OrthoNormalize(ref norm, ref fwd);
+//					Vector3.OrthoNormalize(ref norm, ref fwd);
 					Quaternion quat = Quaternion.LookRotation(fwd, norm);
 
 					// TODO: limit attitude controller roll limiter?
