@@ -9,6 +9,7 @@ using UnityEngine.Profiling;
 // TODO: onFixedUpdate vs onUpdate
 // TODO: check memory fragmentation
 // TODO: compare profiler results
+// TODO: other MJ modules use Mathfx.Approx(input, inputTrim, 0.1f) instead of == to detect user command. why not Mathf.Approximately?
 
 namespace MuMech
 {
@@ -440,7 +441,7 @@ namespace MuMech
 							}
 						}
 					}
-					brake = brake || ((s.wheelThrottle == s.wheelThrottleTrim || !vessel.isActiveVessel) && curSpeed < brakeSpeedLimit && newSpeed < brakeSpeedLimit);
+					brake = brake || ((Mathf.Approximately(s.wheelThrottle, s.wheelThrottleTrim) || !vessel.isActiveVessel) && curSpeed < brakeSpeedLimit && newSpeed < brakeSpeedLimit);
 					// ^ brake if needed to prevent rolling, hopefully
 					tgtSpeed = (newSpeed >= 0 ? newSpeed : 0);
 				}
@@ -452,23 +453,24 @@ namespace MuMech
 			{
 				Profiler.BeginSample("ControlHeading");
 
-				headingErr = MuUtils.ClampDegrees180(vesselState.rotationVesselSurface.eulerAngles.y - heading);
+				headingErr = MuUtils.ClampDegrees180(vesselState.currentHeading - heading);
 // TODO: what should heading control do when driving backwards? keep forward heading or direction?
-if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); }
+//if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); }
 
-				if (s.wheelSteer == s.wheelSteerTrim || !vessel.isActiveVessel)
+				if (Mathf.Approximately(s.wheelSteer, s.wheelSteerTrim) || !vessel.isActiveVessel)
 				{
 					headingPID.intAccum = Mathf.Clamp((float)headingPID.intAccum, -1f, 1f);
 
 					float act = (float)headingPID.Compute(headingErr) * curSpeedSign;
 
-					// turnSpeed needs to be higher than curSpeed or it will never steer as much as it could even at 0.2m/s above it
-					float limit = curSpeedAbs > turnSpeed ? Mathf.Clamp((float)((turnSpeed + 6) / (curSpeed*curSpeed)), 0.1f, 1f) : 1f;
-//float limit = 1f;
-
 					// prevents it from flying above a waypoint and landing with steering at max while still going fast
 					if (traction >= tractionLimit)
+					{
+						// turnSpeed needs to be higher than curSpeed or it will never steer as much as it could even at 0.2m/s above it
+						float limit = curSpeedAbs > turnSpeed ? Mathf.Clamp((float)((turnSpeed + 6) / (curSpeed*curSpeed)), 0.1f, 1f) : 1f;
+//float limit = 1f;
 						s.wheelSteer = Mathf.Clamp(act, -limit, limit);
+					}
 				}
 
 				Profiler.EndSample();
@@ -486,7 +488,7 @@ if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); 
 
 				speedErr = (WaypointIndex == -1 ? (double)speed : tgtSpeed) - curSpeed;
 
-				if (s.wheelThrottle == s.wheelThrottleTrim || !vessel.isActiveVessel)
+				if (Mathf.Approximately(s.wheelThrottle, s.wheelThrottleTrim) || !vessel.isActiveVessel)
 				{
 					speedPID.intAccum = Mathf.Clamp((float)speedPID.intAccum, -5f, 5f);
 
@@ -584,7 +586,7 @@ else { core.attitude.attitudeDeactivate(); }
 				}
 
 				// 5% left, going slow: stop and open solar panels
-				if (energyLeft <= 5 && curSpeedAbs <= brakeSpeedLimit)
+				if (energyLeft <= 5 && curSpeedAbs < brakeSpeedLimit)
 				{
 					s.wheelThrottle = 0;
 					brake = true;
