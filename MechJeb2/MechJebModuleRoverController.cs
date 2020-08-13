@@ -6,6 +6,7 @@ using UnityEngine.Profiling;
 
 // TODO: floats vs double vs int, Vector3 vs Vector3d, Mathf vs Math
 // TODO: order - Vector * this * that vs this * that * Vector
+// TODO: onFixedUpdate vs onUpdate
 // TODO: check memory fragmentation
 // TODO: compare profiler results
 
@@ -521,18 +522,9 @@ if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); 
 						vesselState.surfaceVelocity * curSpeedSign; // in the air so follow velocity
 
 					// cast a ray downwards from 100 units above the rover's expected position in terrainLookAhead seconds
-
+					// assume a flat body at this scale
 					RaycastHit hit;
 					Vector3 norm;
-
-/*
-					// TODO: downwards-ish: if projected far from the vessel, -vesselState.up does not point exactly towards body center
-					// doesn't really matter, even on Gilly
-					Vector3 scanPoint = vessel.CoM + fwd * curSpeedSign * (float)terrainLookAhead;
-					Vector3 scanUp = scanPoint - mainBody.transform.position;
-					scanUp.Normalize();
-					if (Physics.Raycast(scanPoint + scanUp * 100, -scanUp, out hit, 500, 1 << 15, QueryTriggerInteraction.Ignore))
-*/
 
 					if (Physics.Raycast(vessel.CoM + fwd * curSpeedSign * (float)terrainLookAhead + vesselState.up * 100, -vesselState.up, out hit, 500, 1 << 15, QueryTriggerInteraction.Ignore))
 						norm = hit.normal; // terrain slope
@@ -541,7 +533,8 @@ if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); 
 
 // remove vertical component
 //fwd = Vector3.ProjectOnPlane(fwd, vesselState.up);
-//if (fwd == Vector3.zero) { fwd = vesselState.forward; }
+fwd = Vector3.ProjectOnPlane(fwd, norm);
+if (fwd == Vector3.zero) { fwd = vesselState.forward; }
 
 					// point the craft forward, perpendicular to the surface
 					Vector3.OrthoNormalize(ref norm, ref fwd);
@@ -611,6 +604,8 @@ else { core.attitude.attitudeDeactivate(); }
 				// enerygy low, (almost) stopped, any open solar panels: ready for time warp
 				if (energyLeft <= 5 && curSpeedAbs < 0.1f && !waitingForDaylight && openSolars)
 				{
+s.wheelThrottle = 0;
+brake = true;
 					waitingForDaylight = true;
 				}
 
@@ -666,11 +661,6 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no fixedupdate"); return; }
 
 //			Profiler.BeginSample("OnFixedUpdate");
 
-			if (!core.GetComputerModule<MechJebModuleWaypointWindow>().enabled)
-			{
-				Waypoints.ForEach(wp => wp.Update()); // update waypoints unless the waypoint window is (hopefully) doing that already
-			}
-
 			// TODO: why set those here and not in Drive()?
 			headingPID.Kp = hPIDp;
 			headingPID.Ki = hPIDi;
@@ -692,31 +682,19 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no fixedupdate"); return; }
 				core.attitude.users.Remove(this);
 			}
 
+			if (!core.GetComputerModule<MechJebModuleWaypointWindow>().enabled)
+			{
+				Waypoints.ForEach(wp => wp.Update()); // update waypoints unless the waypoint window is (hopefully) doing that already
+			}
+
 			// TODO: what does RoverWindow.OnUpdate() do, anyway?
 			// it updates the menu highlight when another module activates the AP (SpaceplaneAutopilot)
 			// and keeps the module running while the autopilot is active even if the other module unregisters
 			// then shuts the controller down, e.g. after reaching the final waypoint
 
-			if (!core.GetComputerModule<MechJebModuleRoverWindow>().enabled)
-				core.GetComputerModule<MechJebModuleRoverWindow>().OnUpdate(); // update users for Stability Control, Brake on Eject and Brake on Energy Depletion
-
-/*
 			ComputerModule controllerWindow = core.GetComputerModule<MechJebModuleRoverWindow>();
 			if (!controllerWindow.enabled)
-			{
-				if (ControlHeading || ControlSpeed || StabilityControl || BrakeOnEnergyDepletion || BrakeOnEject)
-				{
-					// possibly unreachable code if module is not enabled
-					if (!users.Contains(controllerWindow))
-						users.Add(controllerWindow);
-				}
-				else if (users.Contains(controllerWindow))
-				{
-					// disables module if no other users
-					users.Remove(controllerWindow);
-				}
-			}
-*/
+				controllerWindow.OnUpdate(); // update users for AP features
 
 //			Profiler.EndSample();
 		}
@@ -758,20 +736,6 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no update"); return; }
 				waitingForDaylight = false;
 			}
 
-/*
-			if (!core.GetComputerModule<MechJebModuleRoverWindow>().enabled)
-			{
-				core.GetComputerModule<MechJebModuleRoverWindow>().OnUpdate(); // update users for Stability Control, Brake on Eject and Brake on Energy Depletion
-			}
-
-			if (!StabilityControl && core.attitude.users.Contains(this))
-			{
-				core.attitude.attitudeDeactivate();
-				core.attitude.users.Remove(this);
-			}
-*/
-
-
 //			Profiler.EndSample();
 		}
 
@@ -792,8 +756,6 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no update"); return; }
 
 					foreach (ConfigNode cn in wps.GetNodes("Waypoint"))
 						Waypoints.Add(new MechJebWaypoint(cn));
-
-//					Array.ForEach(wps.GetNodes("Waypoint"), cn => Waypoints.Add(new MechJebWaypoint(cn)));
 
 					int.TryParse(wps.GetValue("Index"), out WaypointIndex);
 					if (WaypointIndex >= Waypoints.Count)
