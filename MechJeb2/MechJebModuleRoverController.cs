@@ -5,6 +5,7 @@ using UnityEngine;
 using UnityEngine.Profiling;
 
 // TODO: floats vs double vs int, Vector3 vs Vector3d, Mathf vs Math
+// TODO: order - Vector * this * that vs this * that * Vector
 // TODO: check memory fragmentation
 // TODO: compare profiler results
 
@@ -151,7 +152,7 @@ namespace MuMech
 
 			// mark north and target directions on horizontal plane
 			Vector3 north = Vector3.ProjectOnPlane(origin.up, up);
-			Vector3 target = Vector3.ProjectOnPlane((toPos - fromPos).normalized, up);
+			Vector3 target = Vector3.ProjectOnPlane(toPos - fromPos, up); // no need to normalize
 
 			// apply protractor
 			return Vector3.SignedAngle(north, target, up);
@@ -238,6 +239,7 @@ namespace MuMech
 			// clamp editable limit to 0-100
 //			tractionLimit = Math.Min(Math.Max(tractionLimit, 0), 100);
 
+			// TODO: set .val to update editor?
 			if (tractionLimit < 0)
 				tractionLimit = 0;
 			else if (tractionLimit > 100)
@@ -512,31 +514,37 @@ if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); 
 					// TODO: maybe tap into KER's impact predictor if available?
 					// TODO: what does CelestialBody.GetImpactLatitudeAndLongitude() do?
 					// TODO: consider actual attitude control delay instead of fixed terrainLookAhead?
-					// TODO: resolve sign confusion
+					// TODO: resolve sign confusion - when going backwards, scan ground in velocity direction but point craft's forward in the opposite
 
-					Vector3 fwd = (traction > 0 ? // TODO: use traction limit? what about side slip?
+					Vector3 fwd = traction > 0 ? // TODO: use traction limit? what about side slip?
 						vesselState.forward * 4f - vessel.transform.right * s.wheelSteer * curSpeedSign : // TODO: why *4? momentum? why not *curSpeed?
-						vesselState.surfaceVelocity * curSpeedSign); // in the air so follow velocity
+						vesselState.surfaceVelocity * curSpeedSign; // in the air so follow velocity
 
 					// cast a ray downwards from 100 units above the rover's expected position in terrainLookAhead seconds
 
 					RaycastHit hit;
 					Vector3 norm;
 
+/*
+					// TODO: downwards-ish: if projected far from the vessel, -vesselState.up does not point exactly towards body center
+					// doesn't really matter, even on Gilly
+					Vector3 scanPoint = vessel.CoM + fwd * curSpeedSign * (float)terrainLookAhead;
+					Vector3 scanUp = scanPoint - mainBody.transform.position;
+					scanUp.Normalize();
+					if (Physics.Raycast(scanPoint + scanUp * 100, -scanUp, out hit, 500, 1 << 15, QueryTriggerInteraction.Ignore))
+*/
+
 					if (Physics.Raycast(vessel.CoM + fwd * curSpeedSign * (float)terrainLookAhead + vesselState.up * 100, -vesselState.up, out hit, 500, 1 << 15, QueryTriggerInteraction.Ignore))
 						norm = hit.normal; // terrain slope
 					else
 						norm = vesselState.up; // no terrain in raydar range, just keep it level
 
-// TODO: think again - rotate up, not flip?
+// remove vertical component
 //fwd = Vector3.ProjectOnPlane(fwd, vesselState.up);
-//fwd *= curSpeedSign;
 //if (fwd == Vector3.zero) { fwd = vesselState.forward; }
 
-					// assume the post-impact velocity follows the surface
-					Vector3.OrthoNormalize(ref norm, ref fwd);
-
 					// point the craft forward, perpendicular to the surface
+					Vector3.OrthoNormalize(ref norm, ref fwd);
 					Quaternion quat = Quaternion.LookRotation(fwd, norm);
 
 					// TODO: limit attitude controller roll limiter?
