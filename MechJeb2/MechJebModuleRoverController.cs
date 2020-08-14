@@ -116,6 +116,9 @@ namespace MuMech
 
 		private List<ModuleWheelBase> wheelbases;
 
+		// TODO: use MechJebModuleSolarPanelController?
+		private IEnumerable<ModuleDeployableSolarPanel> solarPanels;
+
 //		private LineRenderer line;
 
 
@@ -186,7 +189,7 @@ namespace MuMech
 		}
 
 
-		private static List<ModuleWheelBase> CountWheels(Vessel v)
+		private static List<ModuleWheelBase> FindWheels(Vessel v)
 		{
 			// TODO: need to look into the ModuleWheelSteering ModuleWheelMotor ModuleWheelBrakes ModuleWheelBase ModuleWheelSuspension and see what they could bring
 
@@ -203,23 +206,12 @@ namespace MuMech
 			).Select(p => p.GetModule<ModuleWheelBase>()).ToList();
 		}
 
-		protected void OnVesselWasModified(Vessel v)
-		{
-			Profiler.BeginSample("OnVesselWasModified");
-			if (v == vessel)
-			{
-				// TODO: re-use list?
-				wheelbases = null;
-			}
-			Profiler.EndSample();
-		}
-
 		public void CalculateTraction()
 		{
 			Profiler.BeginSample("CalculateTraction");
 
 			if (wheelbases == null)
-				wheelbases = CountWheels(vessel);
+				wheelbases = FindWheels(vessel);
 
 			// sum up percentage of wheels in ground contact
 //			traction = wheelbases.Count > 0 ? wheelbases.Sum(p => p.isGrounded ? 100 : 0) / wheelbases.Count : 0;
@@ -257,6 +249,33 @@ namespace MuMech
 		private float TurningSpeed(float speed, float error)
 		{
 			return Mathf.Sign(speed) * Mathf.Max(Mathf.Abs(speed) / Mathf.Max(Mathf.Abs(error) / 3f, 1f), (float)turnSpeed);
+		}
+
+
+		private static IEnumerable<ModuleDeployableSolarPanel> FindSolarPanels(Vessel v)
+		{
+			// TODO: why use only breakable panels?
+			return v.FindPartModulesImplementing<ModuleDeployableSolarPanel>();
+/*
+			.Where(p =>
+				p.isBreakable
+//				&& p.deployState != ModuleDeployablePart.DeployState.BROKEN
+			);
+*/
+		}
+
+
+		// reset cached part lists
+		protected void OnVesselWasModified(Vessel v)
+		{
+			Profiler.BeginSample("OnVesselWasModified");
+			if (v == vessel)
+			{
+				// TODO: re-use list?
+				wheelbases = null;
+				solarPanels = null;
+			}
+			Profiler.EndSample();
 		}
 
 
@@ -478,12 +497,11 @@ namespace MuMech
 				// TODO: what should heading control do when driving backwards? keep forward heading or direction?
 				//if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); }
 
+				headingPID.intAccum = Mathf.Clamp((float)headingPID.intAccum, -1f, 1f);
+				float act = (float)headingPID.Compute(headingErr) * curSpeedSign;
+
 				if (Mathf.Approximately(s.wheelSteer, s.wheelSteerTrim) || !vessel.isActiveVessel)
 				{
-					headingPID.intAccum = Mathf.Clamp((float)headingPID.intAccum, -1f, 1f);
-
-					float act = (float)headingPID.Compute(headingErr) * curSpeedSign;
-
 					// prevents it from flying above a waypoint and landing with steering at max while still going fast
 					if (traction >= tractionLimit)
 					{
@@ -508,11 +526,13 @@ namespace MuMech
 
 				speedErr = (WaypointIndex == -1 ? (double)speed : tgtSpeed) - curSpeed;
 
+				// TODO: why 5?
+				speedPID.intAccum = Mathf.Clamp((float)speedPID.intAccum, -5f, 5f);
+				float act = (float)speedPID.Compute(speedErr);
+
 				if (Mathf.Approximately(s.wheelThrottle, s.wheelThrottleTrim) || !vessel.isActiveVessel)
 				{
-					speedPID.intAccum = Mathf.Clamp((float)speedPID.intAccum, -5f, 5f);
-
-					s.wheelThrottle = Mathf.Clamp((float)speedPID.Compute(speedErr), -1f, 1f);
+					s.wheelThrottle = Mathf.Clamp(act, -1f, 1f);
 
 					if (Math.Abs(speedErr) > 1 && StabilityControl && !SameSign(s.wheelThrottle, curSpeed)) {
 						brake = true;
@@ -556,7 +576,7 @@ namespace MuMech
 // remove vertical component
 //fwd = Vector3.ProjectOnPlane(fwd, vesselState.up);
 fwd = Vector3.ProjectOnPlane(fwd.normalized, norm);
-if (fwd == Vector3.zero) { fwd = vesselState.forward; }
+if (fwd == Vector3.zero) { print("MJRC: zero forward"); fwd = vesselState.forward; }
 
 					// point the craft forward, perpendicular to the surface
 //					Vector3.OrthoNormalize(ref norm, ref fwd);
@@ -588,12 +608,8 @@ else { core.attitude.attitudeDeactivate(); }
 				// TODO: move to (Fixed)Update?
 				EnergyLeft();
 
-				// TODO: use MechJebModuleSolarPanelController?
-				// TODO: why use only breakable panels?
-				IEnumerable<ModuleDeployableSolarPanel> solarPanels = vessel.FindPartModulesImplementing<ModuleDeployableSolarPanel>().Where(p =>
-					p.isBreakable &&
-					p.deployState != ModuleDeployablePart.DeployState.BROKEN
-				);
+				if (solarPanels == null)
+					solarPanels = FindSolarPanels(vessel);
 
 				bool openSolars = solarPanels.Any(p => p.deployState == ModuleDeployablePart.DeployState.EXTENDED);
 
@@ -733,9 +749,10 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no update"); return; }
 
 				EnergyLeft();
 
-				bool openSolars = vessel.FindPartModulesImplementing<ModuleDeployableSolarPanel>().Where(p =>
-					p.deployState == ModuleDeployablePart.DeployState.EXTENDED
-				).Any();
+				if (solarPanels == null)
+					solarPanels = FindSolarPanels(vessel);
+
+				bool openSolars = solarPanels.Any(p => p.deployState == ModuleDeployablePart.DeployState.EXTENDED);
 
 				// batteries full or no solar panels extended: deactivate warp
 				// TODO: prevents player from time-warping with closed/broken/no solar panels
