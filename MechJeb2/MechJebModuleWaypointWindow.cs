@@ -550,7 +550,6 @@ namespace MuMech
 		{
 			return new GUILayoutOption[] { GUILayout.Width(500), GUILayout.Height(400) };
 		}
-
 		public void DrawPageWaypoints()
 		{
 			bool alt = GameSettings.MODIFIER_KEY.GetKey();
