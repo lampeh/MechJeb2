@@ -330,6 +330,7 @@ namespace MuMech
 
 			GameEvents.onVesselWasModified.Remove(OnVesselWasModified);
 			wheelbases = null;
+			solarPanels = null;
 
 			if (core.attitude.users.Contains(this))
 			{
@@ -346,8 +347,6 @@ namespace MuMech
 
 		public override void Drive(FlightCtrlState s)
 		{
-//			Profiler.BeginSample("Drive");
-
 			// TODO put the brake in when running out of power to prevent nighttime solar failures on hills, or atleast try to
 			// TODO make distance calculation for 'reached' determination consider the rover and waypoint on sealevel to prevent height differences from messing it up -- should be done now?
 
@@ -702,15 +701,11 @@ brake = true;
 
 lastThrottle = (int)(s.wheelThrottle * 100);
 lastSteer = (int)(s.wheelSteer * 100);
-
-//			Profiler.EndSample();
 		}
 
 		public override void OnFixedUpdate()
 		{
 if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no fixedupdate"); return; }
-
-//			Profiler.BeginSample("OnFixedUpdate");
 
 			// TODO: why set those here and not in Drive()?
 			headingPID.Kp = hPIDp;
@@ -746,15 +741,11 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no fixedupdate"); return; }
 			ComputerModule controllerWindow = core.GetComputerModule<MechJebModuleRoverWindow>();
 			if (!controllerWindow.enabled)
 				controllerWindow.OnUpdate(); // update users for AP features
-
-//			Profiler.EndSample();
 		}
 
 		public override void OnUpdate()
 		{
 if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no update"); return; }
-
-//			Profiler.BeginSample("OnUpdate");
 
 			if (WarpToDaylight && waitingForDaylight && vessel.isActiveVessel)
 			{
@@ -787,14 +778,10 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no update"); return; }
 			{
 				waitingForDaylight = false;
 			}
-
-//			Profiler.EndSample();
 		}
 
 		public override void OnLoad(ConfigNode local, ConfigNode type, ConfigNode global)
 		{
-//			Profiler.BeginSample("OnLoad");
-
 			base.OnLoad(local, type, global);
 
 			if (local != null)
@@ -814,14 +801,10 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no update"); return; }
 						WaypointIndex = Waypoints.Count - 1;
 				}
 			}
-
-//			Profiler.EndSample();
 		}
 
 		public override void OnSave(ConfigNode local, ConfigNode type, ConfigNode global)
 		{
-//			Profiler.BeginSample("OnSave");
-
 			base.OnSave(local, type, global);
 
 			if (local != null)
@@ -839,8 +822,6 @@ if (!HighLogic.LoadedSceneIsFlight) { print("MJRC: no update"); return; }
 					local.AddNode(cn);
 				}
 			}
-
-//			Profiler.EndSample();
 		}
 
 		public MechJebModuleRoverController(MechJebCore core) : base(core) { }

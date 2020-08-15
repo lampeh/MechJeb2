@@ -897,8 +897,6 @@ namespace MuMech
 
 		protected override void WindowGUI(int windowID)
 		{
-//			Profiler.BeginSample("WindowGUI");
-
 			if (GUI.Button(new Rect(windowPos.width - 48, 0, 13, 20), "?", GuiUtils.yellowOnHover))
 			{
 				var help = core.GetComputerModule<MechJebModuleWaypointHelpWindow>();
@@ -992,14 +990,10 @@ namespace MuMech
 			}
 
 			base.WindowGUI(windowID);
-
-//			Profiler.EndSample();
 		}
 
 		public override void OnFixedUpdate()
 		{
-//			Profiler.BeginSample("OnFixedUpdate");
-
 			if (vessel.isActiveVessel && (renderer == null || renderer.ap != ap)) { MechJebRouteRenderer.AttachToMapView(core); }
 			ap.Waypoints.ForEach(wp => wp.Update());
 //			float scale = Vector3.Distance(FlightCamera.fetch.mainCamera.transform.position, vessel.CoM) / 900f;
@@ -1007,8 +1001,6 @@ namespace MuMech
 //			greenLine.SetPosition(1, vessel.CoM + ap.norm * 5);
 //			greenLine.SetWidth(scale + 0.1f, scale + 0.1f);
 			base.OnFixedUpdate();
-
-//			Profiler.EndSample();
 		}
 	}
 
@@ -1055,8 +1047,6 @@ namespace MuMech
 
 		protected override void WindowGUI(int windowID)
 		{
-//			Profiler.BeginSample("WindowGUI");
-
 			if (btnInactive == null)
 			{
 				btnInactive = new GUIStyle(GuiUtils.skin.button);
@@ -1140,8 +1130,6 @@ namespace MuMech
 			}
 
 			base.WindowGUI(windowID);
-
-//			Profiler.EndSample();
 		}
 	}
 
