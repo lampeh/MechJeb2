@@ -20,7 +20,7 @@ namespace MuMech
 
 		public int WaypointIndex = -1;
 		public List<MechJebWaypoint> Waypoints = new List<MechJebWaypoint>();
-		public MuMech.MovingAverage etaSpeed = new MovingAverage(50); // TODO: maybe rename avgSpeed?
+		public MuMech.MovingAverage etaSpeed = new MovingAverage(50); // TODO: maybe rename avgSpeed? similar to vesselState.speedSurfaceHorizontal but not quite
 
 
 		[ToggleInfoItem("#MechJeb_ControlHeading", InfoItem.Category.Rover), Persistent(pass = (int)Pass.Local)] // Heading control
@@ -368,8 +368,12 @@ namespace MuMech
 			// "forward" portion of surface velocity vector
 			curSpeed = Vector3.Dot(vesselState.surfaceVelocity, vesselState.forward);
 
+if (Mathf.Approximately(curSpeed, 0))
+	curSpeed = 0;
+
 			curSpeedAbs = Mathf.Abs(curSpeed);
 			float curSpeedSign = Mathf.Sign(curSpeed);
+//			float curSpeedSign = Mathf.Approximately(curSpeed, 0) ? 1 : Mathf.Sign(curSpeed);
 
 			// TODO: differentiate traction limits for driving, braking, steering?
 			CalculateTraction();
@@ -400,7 +404,7 @@ namespace MuMech
 					Profiler.BeginSample("ControlSpeed");
 
 					MechJebWaypoint nextWP = (WaypointIndex < Waypoints.Count - 1 ? Waypoints[WaypointIndex + 1] : (LoopWaypoints ? Waypoints[0] : null));
-					float distance = Vector3.Distance(vessel.CoM, wp.Position);
+					float distance = Vector3.Distance(vessel.CoM, wp.Position); // TODO: what if a Waypoint is too far above ground? WP.Update only casts ground rays if the active vessel approaches
 
 					if (wp.Target != null)
 						distance += (float)(wp.Target.srfSpeed * curSpeed) / 2;
@@ -495,10 +499,14 @@ namespace MuMech
 				headingErr = MuUtils.ClampDegrees180(vesselState.currentHeading - heading);
 
 				// TODO: what should heading control do when driving backwards? keep forward heading or direction?
-				//if (curSpeedSign < 0) { headingErr = MuUtils.ClampDegrees180(headingErr + 180); }
+				// traditional behaviour: MJ would try to keep "forward" pointed towards heading but steered in the wrong direction
+				// this achieves about the same but wiggles the wheels (and StabilityControl) if speed is near 0
+//				if (curSpeedSign < 0)
+				if (curSpeed < -0.1f)
+					headingErr = MuUtils.ClampDegrees180(headingErr + 180);
 
 				headingPID.intAccum = Mathf.Clamp((float)headingPID.intAccum, -1f, 1f);
-				float act = (float)headingPID.Compute(headingErr) * curSpeedSign;
+				float act = (float)headingPID.Compute(headingErr);
 
 				if (Mathf.Approximately(s.wheelSteer, s.wheelSteerTrim) || !vessel.isActiveVessel)
 				{
@@ -507,7 +515,7 @@ namespace MuMech
 					{
 						// turnSpeed needs to be higher than curSpeed or it will never steer as much as it could even at 0.2m/s above it
 						float limit = curSpeedAbs > turnSpeed ? Mathf.Clamp((float)((turnSpeed + 6) / (curSpeed*curSpeed)), 0.1f, 1f) : 1f;
-						s.wheelSteer = Mathf.Clamp(act, -limit, limit);
+						s.wheelSteer = Mathf.Clamp(act, -limit, limit) * curSpeedSign;
 					}
 				}
 
