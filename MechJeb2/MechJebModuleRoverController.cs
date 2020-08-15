@@ -411,8 +411,8 @@ if (Mathf.Approximately(curSpeed, 0))
 
 					float maxSpeed = (wp.MaxSpeed > 0 ? wp.MaxSpeed : (float)speed); // speed used to go towards the waypoint, using the waypoints maxSpeed if set or just stick with the set speed
 					float minSpeed = (wp.MinSpeed > 0 ? wp.MinSpeed :
-								   (nextWP != null ? TurningSpeed((nextWP.MaxSpeed > 0 ? nextWP.MaxSpeed : (float)speed), (float)heading - HeadingToPos(wp.Position, nextWP.Position)) :
-								   (distance - wp.Radius > 50 ? (float)turnSpeed : 1)));
+								(nextWP != null ? TurningSpeed((nextWP.MaxSpeed > 0 ? nextWP.MaxSpeed : (float)speed), (float)heading - HeadingToPos(wp.Position, nextWP.Position)) :
+								(distance - wp.Radius > 50 ? (float)turnSpeed : 1)));
 					minSpeed = (wp.Quicksave ? 1 : minSpeed);
 					// ^ speed used to go through the waypoint, using half the set speed or maxSpeed as minSpeed for routing waypoints (all except the last)
 					float newSpeed = Mathf.Min(maxSpeed, Mathf.Max((distance - wp.Radius) / curSpeed, minSpeed)); // brake when getting closer
