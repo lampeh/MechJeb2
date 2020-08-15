@@ -45,7 +45,7 @@ namespace MuMech
 				help.selTopic = ((IList)help.topics).IndexOf("Controller");
 				help.enabled = help.selTopic > -1 || help.enabled;
 			}
-			
+
 			ed.registry.Find(i => i.id == "Toggle:RoverController.ControlHeading").DrawItem();
 			GUILayout.BeginHorizontal();
 			ed.registry.Find(i => i.id == "Editable:RoverController.heading").DrawItem();
@@ -104,14 +104,14 @@ if (autopilot.WaypointIndex >= 0) {
 			GUILayout.Label("Index " + (autopilot.WaypointIndex + 1).ToString() + " of " + autopilot.Waypoints.Count.ToString(), GUILayout.ExpandWidth(false));
 			GUILayout.EndHorizontal();
 }
-			
+
 //			GUILayout.Label("Debug1: " + autopilot.debug1.ToString("F3"));
-			
+
 			GUILayout.BeginHorizontal();
 			if (core.target != null && core.target.Target != null)
 			{
 				var vssl = core.target.Target.GetVessel();
-				
+
 				if (GUILayout.Button(Localizer.Format("#MechJeb_Rover_button1"))) // "To Target"
 				{
 					core.GetComputerModule<MechJebModuleWaypointWindow>().selIndex = -1;
@@ -131,7 +131,7 @@ if (autopilot.WaypointIndex >= 0) {
 				}
 			}
 			GUILayout.EndHorizontal();
-			
+
 			GUILayout.BeginHorizontal();
 			if (autopilot.Waypoints.Count > 0) {
 				if (!autopilot.ControlHeading || !autopilot.ControlSpeed) {
@@ -155,9 +155,9 @@ if (autopilot.WaypointIndex < 0) autopilot.WaypointIndex = 0;
 				}
 			}
 			GUILayout.EndHorizontal();
-			
+
 			GUILayout.EndVertical();
-			
+
 			base.WindowGUI(windowID);
 		}
 
@@ -176,7 +176,7 @@ if (autopilot.WaypointIndex < 0) autopilot.WaypointIndex = 0;
 				}
 			}
 		}
-			
+
 		public override void OnModuleDisabled()
 		{
 			core.GetComputerModule<MechJebModuleWaypointWindow>().enabled = false;
