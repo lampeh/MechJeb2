@@ -21,8 +21,7 @@ namespace MuMech
 		public float MaxSpeed;
 		public bool Quicksave;
 
-		public CelestialBody Body  {
-			// TODO: ActiveVessel or the one this Waypoint belongs to?
+		private CelestialBody Body  {
 			get { return (Target != null ? Target.mainBody : FlightGlobals.ActiveVessel.mainBody); }
 		}
 
