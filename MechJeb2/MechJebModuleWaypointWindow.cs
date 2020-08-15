@@ -675,16 +675,14 @@ namespace MuMech
 				{
 					ap.WaypointIndex = -1;
 					ap.Waypoints.Clear();
-					selIndex = -1;
 				}
 				else if (selIndex >= 0)
 				{
 					ap.Waypoints.RemoveAt(selIndex);
 					if (ap.WaypointIndex > selIndex) { ap.WaypointIndex--; }
 					if (ap.WaypointIndex >= ap.Waypoints.Count) { ap.WaypointIndex = ap.Waypoints.Count - 1; }
-//					if (selIndex >= ap.Waypoints.Count) { selIndex = ap.Waypoints.Count - 1; }
-					selIndex = -1;
 				}
+				selIndex = -1;
 			}
 			if (GUILayout.Button((alt ? "Top" : "Up"), GUILayout.Width(57)) && selIndex > 0 && selIndex < ap.Waypoints.Count && ap.Waypoints.Count >= 2)
 			{
