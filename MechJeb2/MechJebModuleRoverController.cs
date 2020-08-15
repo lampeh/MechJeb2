@@ -566,6 +566,7 @@ if (Mathf.Approximately(curSpeed, 0))
 					// TODO: what does CelestialBody.GetImpactLatitudeAndLongitude() do?
 					// TODO: consider actual attitude control delay instead of fixed terrainLookAhead?
 					// TODO: resolve sign confusion - when going backwards, scan ground in velocity direction but point craft's forward in the opposite
+					// TODO: add some roll torque to counteract wheel steering?
 
 					Vector3 fwd = traction > 0 ? // TODO: use traction limit? what about side slip?
 						vesselState.forward * 4f - vessel.transform.right * s.wheelSteer * curSpeedSign : // TODO: why *4? momentum? why not *curSpeed?
@@ -585,6 +586,10 @@ if (Mathf.Approximately(curSpeed, 0))
 //fwd = Vector3.ProjectOnPlane(fwd, vesselState.up);
 fwd = Vector3.ProjectOnPlane(fwd.normalized, norm);
 if (fwd == Vector3.zero) { print("MJRC: zero forward"); fwd = vesselState.forward; }
+
+// hug the curve
+//if (traction >= tractionLimit)
+//	norm = Quaternion.AngleAxis(s.wheelSteer * -2, fwd) * norm;
 
 					// point the craft forward, perpendicular to the surface
 //					Vector3.OrthoNormalize(ref norm, ref fwd);
