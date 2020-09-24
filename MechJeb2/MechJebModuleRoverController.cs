@@ -146,15 +146,18 @@ namespace MuMech
 			if (wheelbases.Count == 0) { OnVesselModified(vessel); }
 			traction = 0;
 
-			for (int i = 0; i < wheelbases.Count; i++)
+			if (wheelbases.Count > 0)
 			{
-				if (wheelbases[i].isGrounded)
+				for (int i = 0; i < wheelbases.Count; i++)
 				{
-					traction += 100;
+					if (wheelbases[i].isGrounded)
+					{
+						traction += 100;
+					}
 				}
-			}
 
-			traction /= wheelbases.Count;
+				traction /= wheelbases.Count;
+			}
 		}
 
 		public override void OnModuleDisabled()
